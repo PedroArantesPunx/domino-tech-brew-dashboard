@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import SlackAlertsDashboard from './App';
+import App from './App.js';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -8,6 +8,6 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <React.StrictMode>
-    <SlackAlertsDashboard />
+    <App />
   </React.StrictMode>
 );
