@@ -8,6 +8,12 @@ Este projeto está containerizado com Docker para facilitar o deployment em qual
 - ✅ Docker Compose (ou Docker Desktop)
 - ✅ Token do Slack configurado
 
+## 🐳 Imagens Docker Hub
+
+Imagens pré-buildadas disponíveis:
+- **Backend**: `pedropunx/domino-tech-backend:latest`
+- **Frontend**: `pedropunx/domino-tech-frontend:latest`
+
 ## 🚀 Quick Start
 
 ### 1. Configurar Variáveis de Ambiente
@@ -31,11 +37,11 @@ NODE_ENV=production
 ### 2. Iniciar com Docker Compose
 
 ```bash
-# Build e start dos containers
-docker-compose up --build
+# Usar imagens pré-buildadas do Docker Hub
+docker-compose up -d
 
-# Ou em background
-docker-compose up -d --build
+# Ou se quiser buildar localmente
+docker-compose up --build
 ```
 
 ### 3. Acessar Aplicação

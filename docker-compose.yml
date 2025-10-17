@@ -3,9 +3,10 @@ version: '3.8'
 services:
   # Backend API
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: pedropunx/domino-tech-backend:latest
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
     container_name: dashboard-backend
     restart: unless-stopped
     environment:
@@ -25,9 +26,10 @@ services:
 
   # Frontend React + Nginx
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: pedropunx/domino-tech-frontend:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: dashboard-frontend
     restart: unless-stopped
     ports:
