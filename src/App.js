@@ -8,8 +8,16 @@ const App = () => {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  // URL do backend - ALTERE se necessário
-  const API_URL = 'http://localhost:3001';
+  // URL do backend - funciona tanto local quanto via proxy do nginx
+  const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '/api';
+
+  // State para estatísticas
+  const [stats, setStats] = useState({
+    totalAlertas: 0,
+    alertasHoje: 0,
+    ultimoAlerta: null,
+    ultimaAtualizacao: null
+  });
 
   // Carregar dados do backend
   const loadData = async () => {
@@ -22,7 +30,8 @@ const App = () => {
         throw new Error('Erro ao conectar com o backend');
       }
       const result = await response.json();
-      setData(result.data);
+      setData(result.data || []);
+      setStats(result.stats || {});
       setLastUpdate(new Date().toLocaleString('pt-BR'));
     } catch (err) {
       setError(err.message);
@@ -134,10 +143,10 @@ const App = () => {
           marginBottom: '32px'
         }}>
           {[
-            { title: 'Total de Alertas', value: '0', color: '#3b82f6' },
-            { title: 'Alertas Hoje', value: '0', color: '#10b981' },
+            { title: 'Total de Alertas', value: stats.totalAlertas || '0', color: '#3b82f6' },
+            { title: 'Alertas Hoje', value: stats.alertasHoje || '0', color: '#10b981' },
             { title: 'Status Backend', value: error ? 'Desconectado' : 'Conectado', color: error ? '#ef4444' : '#10b981' },
-            { title: 'Última Atualização', value: lastUpdate || 'Nunca', color: '#6b7280' }
+            { title: 'Última Atualização', value: lastUpdate || 'Aguardando...', color: '#6b7280' }
           ].map((stat, index) => (
             <div key={index} style={{
               backgroundColor: 'white',
@@ -180,7 +189,7 @@ const App = () => {
             fontWeight: 'bold',
             marginBottom: '16px'
           }}>
-            Dados do Dashboard
+            {data.length > 0 ? 'Últimos Relatórios Financeiros' : 'Dados do Dashboard'}
           </h2>
 
           {loading ? (
@@ -188,23 +197,138 @@ const App = () => {
               🔄 Carregando dados...
             </div>
           ) : data.length > 0 ? (
-            <div style={{ color: '#6b7280' }}>
-              <p>Dados carregados: {data.length} itens</p>
-              <pre style={{
-                backgroundColor: '#f9fafb',
-                padding: '16px',
-                borderRadius: '6px',
-                overflow: 'auto',
-                fontSize: '12px'
-              }}>
-                {JSON.stringify(data, null, 2)}
-              </pre>
+            <div>
+              {/* Último alerta em destaque */}
+              {stats.ultimoAlerta && (
+                <div style={{
+                  backgroundColor: '#f0f9ff',
+                  border: '2px solid #3b82f6',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  marginBottom: '24px'
+                }}>
+                  <h3 style={{
+                    color: '#1f2937',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    marginBottom: '12px'
+                  }}>
+                    📊 Último Relatório - {stats.ultimoAlerta.data} às {stats.ultimoAlerta.hora}
+                  </h3>
+                  <div>
+                    <div style={{
+                      display: 'inline-block',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      padding: '4px 12px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      marginBottom: '12px'
+                    }}>
+                      {stats.ultimoAlerta.tipoRelatorio || 'Relatório'}
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                      gap: '16px'
+                    }}>
+                      {stats.ultimoAlerta.tipoRelatorio === 'Performance de Produtos' ? [
+                        { label: 'GGR Total', value: stats.ultimoAlerta.ggr ? `R$ ${stats.ultimoAlerta.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#3b82f6' },
+                        { label: 'NGR Total', value: stats.ultimoAlerta.ngr ? `R$ ${stats.ultimoAlerta.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#10b981' },
+                        { label: 'Turnover Total', value: stats.ultimoAlerta.turnoverTotal ? `R$ ${stats.ultimoAlerta.turnoverTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#8b5cf6' },
+                        { label: 'Cassino GGR', value: stats.ultimoAlerta.cassinoGGR ? `R$ ${stats.ultimoAlerta.cassinoGGR.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#f59e0b' },
+                        { label: 'Cassino Turnover', value: stats.ultimoAlerta.cassinoTurnover ? `R$ ${stats.ultimoAlerta.cassinoTurnover.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#ec4899' },
+                        { label: 'Sportsbook GGR', value: stats.ultimoAlerta.sportsbookGGR ? `R$ ${stats.ultimoAlerta.sportsbookGGR.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#14b8a6' },
+                        { label: 'Sportsbook Turnover', value: stats.ultimoAlerta.sportsbookTurnover ? `R$ ${stats.ultimoAlerta.sportsbookTurnover.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#06b6d4' }
+                      ] : [
+                        { label: 'GGR', value: stats.ultimoAlerta.ggr ? `R$ ${stats.ultimoAlerta.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#3b82f6' },
+                        { label: 'NGR', value: stats.ultimoAlerta.ngr ? `R$ ${stats.ultimoAlerta.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#10b981' },
+                        { label: 'Depósitos', value: stats.ultimoAlerta.depositos ? `R$ ${stats.ultimoAlerta.depositos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#8b5cf6' },
+                        { label: 'Saques', value: stats.ultimoAlerta.saques ? `R$ ${stats.ultimoAlerta.saques.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#ef4444' },
+                        { label: 'Fluxo Líquido', value: stats.ultimoAlerta.fluxoLiquido ? `R$ ${stats.ultimoAlerta.fluxoLiquido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A', color: '#f59e0b' },
+                        { label: 'Jogadores Únicos', value: stats.ultimoAlerta.jogadoresUnicos || 'N/A', color: '#06b6d4' },
+                        { label: 'Apostadores', value: stats.ultimoAlerta.apostadores || 'N/A', color: '#ec4899' },
+                        { label: 'Depositantes', value: stats.ultimoAlerta.depositantes || 'N/A', color: '#14b8a6' }
+                      ].map((item, idx) => (
+                        <div key={idx}>
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>{item.label}</div>
+                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: item.color }}>{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabela de histórico */}
+              <div style={{ marginTop: '24px' }}>
+                <h3 style={{
+                  color: '#1f2937',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  marginBottom: '12px'
+                }}>
+                  📋 Histórico ({data.length} registros)
+                </h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Data</th>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Hora</th>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Tipo</th>
+                        <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#374151' }}>GGR</th>
+                        <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#374151' }}>NGR</th>
+                        <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Depósitos</th>
+                        <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Turnover</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.slice().reverse().map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                          <td style={{ padding: '12px', color: '#6b7280' }}>{item.data || '-'}</td>
+                          <td style={{ padding: '12px', color: '#6b7280' }}>{item.hora || '-'}</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              backgroundColor: item.tipoRelatorio === 'Performance de Produtos' ? '#dbeafe' : '#fef3c7',
+                              color: item.tipoRelatorio === 'Performance de Produtos' ? '#1e40af' : '#92400e',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '500'
+                            }}>
+                              {item.tipoRelatorio === 'Performance de Produtos' ? 'Performance' : 'Risco'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', color: '#1f2937', fontWeight: '500' }}>
+                            {item.ggr ? `R$ ${item.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : '-'}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', color: '#1f2937', fontWeight: '500' }}>
+                            {item.ngr ? `R$ ${item.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : '-'}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', color: '#1f2937', fontWeight: '500' }}>
+                            {item.depositos ? `R$ ${item.depositos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : '-'}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', color: '#1f2937', fontWeight: '500' }}>
+                            {item.turnoverTotal ? `R$ ${item.turnoverTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
               📊 Aguardando dados do backend...
               <br />
-              <small>Configure o backend Slack para ver os alertas aqui</small>
+              <small>O backend está buscando mensagens do Slack automaticamente</small>
+              <br />
+              <small style={{ marginTop: '8px', display: 'block' }}>Ou clique em "Atualizar" para forçar uma busca</small>
             </div>
           )}
         </div>
