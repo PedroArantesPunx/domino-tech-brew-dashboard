@@ -59,3 +59,5 @@ ssl/
 # Backups
 backup*.json
 *.backup
+# Backups
+.backups/
