@@ -200,6 +200,78 @@ const App = () => {
     return <span style={{ color: '#f59e0b' }}>→ {value.toFixed(1)}%</span>;
   };
 
+  // ==== NOVA FUNCIONALIDADE: EXPORTAÇÃO PARA CSV ====
+  const exportToCSV = () => {
+    if (!filteredData || filteredData.length === 0) {
+      alert('Nenhum dado para exportar!');
+      return;
+    }
+
+    // Definir cabeçalhos do CSV
+    const headers = [
+      'Data', 'Hora', 'Tipo Relatório', 'GGR', 'NGR', 'Turnover Total',
+      'Depósitos', 'Saques', 'Fluxo Líquido', 'Jogadores Únicos', 'Apostadores', 'Depositantes',
+      'Cassino GGR', 'Cassino Turnover', 'Sportsbook GGR', 'Sportsbook Turnover',
+      'Saldo Inicial', 'Saldo Final', 'Variação Saldo',
+      'Depósito Médio', 'Nº Médio Depósitos', 'Saque Médio', 'Ticket Médio', 'GGR Médio/Jogador',
+      'Bônus Concedidos', 'Bônus Convertidos', 'Taxa Conversão Bônus', 'Apostas com Bônus', 'Custo Bônus',
+      'Count'
+    ];
+
+    // Converter dados para CSV
+    const csvRows = [
+      headers.join(','), // Cabeçalho
+      ...filteredData.map(item => [
+        item.data || '',
+        item.hora || '',
+        item.tipoRelatorio || '',
+        item.ggr || '',
+        item.ngr || '',
+        item.turnoverTotal || '',
+        item.depositos || '',
+        item.saques || '',
+        item.fluxoLiquido || '',
+        item.jogadoresUnicos || '',
+        item.apostadores || '',
+        item.depositantes || '',
+        item.cassinoGGR || '',
+        item.cassinoTurnover || '',
+        item.sportsbookGGR || '',
+        item.sportsbookTurnover || '',
+        item.saldoInicial || '',
+        item.saldoFinal || '',
+        item.variacaoSaldo || '',
+        item.depositoMedio || '',
+        item.numeroMedioDepositos || '',
+        item.saqueMedio || '',
+        item.ticketMedio || '',
+        item.ggrMedioJogador || '',
+        item.bonusConcedidos || '',
+        item.bonusConvertidos || '',
+        item.taxaConversaoBonus || '',
+        item.apostasComBonus || '',
+        item.custoBonus || '',
+        item.count || ''
+      ].join(','))
+    ];
+
+    // Criar blob e download
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `dashboard-export-${timestamp}.csv`;
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'Arial' }}>
       {/* Header */}
@@ -215,6 +287,14 @@ const App = () => {
               style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}
             >
               {loading ? 'Carregando...' : 'Atualizar'}
+            </button>
+            <button
+              onClick={exportToCSV}
+              disabled={loading || !filteredData || filteredData.length === 0}
+              style={{ padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: (loading || !filteredData || filteredData.length === 0) ? 'not-allowed' : 'pointer', opacity: (loading || !filteredData || filteredData.length === 0) ? 0.6 : 1 }}
+              title="Exportar dados filtrados para CSV"
+            >
+              📥 Exportar CSV
             </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
               <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
@@ -713,7 +793,7 @@ const App = () => {
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: '32px', padding: '16px', color: '#6b7280', fontSize: '14px' }}>
           <p style={{ margin: 0 }}>
-            Dashboard v4.0 Completo - 13 Campos de Bônus/Comportamento | Exibindo {filteredData.length} de {data.length} períodos | Status: {loading ? 'Carregando...' : autoRefresh ? 'Auto-refresh ativo' : 'Pausado'}
+            Dashboard v4.1 - 13 Campos + Filtros + Exportação CSV | Exibindo {filteredData.length} de {data.length} períodos | Status: {loading ? 'Carregando...' : autoRefresh ? 'Auto-refresh ativo' : 'Pausado'}
           </p>
         </div>
       </div>
