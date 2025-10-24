@@ -49,10 +49,14 @@ const DATA_FILE = path.join(__dirname, 'alertas.json');
  */
 function parseSlackMessage(text) {
   try {
+    // Usar timezone de Brasília (UTC-3)
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+
     const data = {
-      timestamp: new Date().toISOString(),
-      hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      data: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      timestamp: brasiliaTime.toISOString(),
+      hora: brasiliaTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }),
+      data: brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
     };
 
     // Determinar tipo de relatório
@@ -149,6 +153,90 @@ function parseSlackMessage(text) {
       if (depositantesMatch) {
         data.depositantes = parseInt(depositantesMatch[1].replace(/\./g, '').replace(',', ''));
       }
+
+      // ==================== NOVOS CAMPOS: SALDO E VARIAÇÃO ====================
+
+      // Extrair Saldo Inicial
+      const saldoInicialMatch = text.match(/Saldo Inicial:.*?R\$\s*([0-9,\.]+)/);
+      if (saldoInicialMatch) {
+        data.saldoInicial = parseFloat(saldoInicialMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Saldo Final
+      const saldoFinalMatch = text.match(/Saldo Final:.*?R\$\s*([0-9,\.]+)/);
+      if (saldoFinalMatch) {
+        data.saldoFinal = parseFloat(saldoFinalMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Variação de Saldo
+      const variacaoSaldoMatch = text.match(/Variação de Saldo:.*?R\$\s*([0-9,\.]+)/);
+      if (variacaoSaldoMatch) {
+        data.variacaoSaldo = parseFloat(variacaoSaldoMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // ==================== NOVOS CAMPOS: COMPORTAMENTO FINANCEIRO ====================
+
+      // Extrair Depósito médio por depositante
+      const depositoMedioMatch = text.match(/Depósito médio \/ depositante:.*?R\$\s*([0-9,\.]+)/);
+      if (depositoMedioMatch) {
+        data.depositoMedio = parseFloat(depositoMedioMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Número médio de depósitos por depositante
+      const numDepositosMatch = text.match(/Nº médio de depósitos \/ depositante:.*?([0-9,\.]+)/);
+      if (numDepositosMatch) {
+        data.numeroMedioDepositos = parseFloat(numDepositosMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Saque médio por sacador
+      const saqueMedioMatch = text.match(/Saque médio \/ sacador:.*?R\$\s*([0-9,\.]+)/);
+      if (saqueMedioMatch) {
+        data.saqueMedio = parseFloat(saqueMedioMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Ticket médio por jogador ativo
+      const ticketMedioMatch = text.match(/Ticket médio \/ jogador ativo:.*?R\$\s*([0-9,\.]+)/);
+      if (ticketMedioMatch) {
+        data.ticketMedio = parseFloat(ticketMedioMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair GGR médio por jogador ativo
+      const ggrMedioJogadorMatch = text.match(/GGR médio \/ jogador ativo:.*?R\$\s*([0-9,\.]+)/);
+      if (ggrMedioJogadorMatch) {
+        data.ggrMedioJogador = parseFloat(ggrMedioJogadorMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // ==================== NOVOS CAMPOS: BÔNUS E PROMOÇÕES ====================
+
+      // Extrair Bônus concedidos
+      const bonusConcedidosMatch = text.match(/Bônus concedidos:.*?R\$\s*([0-9,\.]+)/);
+      if (bonusConcedidosMatch) {
+        data.bonusConcedidos = parseFloat(bonusConcedidosMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Bônus convertidos em cash
+      const bonusConvertidosMatch = text.match(/Bônus convertidos em cash:.*?R\$\s*([0-9,\.]+)/);
+      if (bonusConvertidosMatch) {
+        data.bonusConvertidos = parseFloat(bonusConvertidosMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Taxa de conversão de bônus
+      const taxaConversaoBonusMatch = text.match(/Taxa de conversão:.*?\(\s*([0-9,\.]+)%/);
+      if (taxaConversaoBonusMatch) {
+        data.taxaConversaoBonus = parseFloat(taxaConversaoBonusMatch[1].replace(',', '.'));
+      }
+
+      // Extrair Apostas feitas com bônus
+      const apostasComBonusMatch = text.match(/Apostas feitas com bônus:.*?R\$\s*([0-9,\.]+)/);
+      if (apostasComBonusMatch) {
+        data.apostasComBonus = parseFloat(apostasComBonusMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+
+      // Extrair Custo de bônus
+      const custoBonusMatch = text.match(/Custo de bônus.*?R\$\s*([0-9,\.]+)/);
+      if (custoBonusMatch) {
+        data.custoBonus = parseFloat(custoBonusMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
     }
 
     return data;
@@ -189,37 +277,64 @@ async function saveData(newData) {
 }
 
 /**
- * Buscar mensagens do Slack
+ * Buscar TODAS as mensagens do Slack com paginação
+ * Percorre todo o histórico do canal usando cursor
  */
 async function fetchSlackMessages() {
   try {
-    console.log('📥 Buscando mensagens do Slack...');
+    console.log('📥 Buscando TODO o histórico de mensagens do Slack...');
 
-    const result = await slackClient.conversations.history({
-      channel: CHANNEL_ID,
-      limit: 100 // Buscar últimas 100 mensagens
-    });
+    let allMessages = [];
+    let cursor = null;
+    let pageCount = 0;
 
-    if (result.messages && result.messages.length > 0) {
-      console.log(`✅ Encontradas ${result.messages.length} mensagens`);
+    do {
+      pageCount++;
+      console.log(`📄 Buscando página ${pageCount}...`);
 
-      // Processar cada mensagem
-      for (const message of result.messages) {
-        if (message.text && (
-          message.text.includes('Relatório de Performance de Produtos') ||
-          message.text.includes('Relatório Time de Risco')
-        )) {
-          const parsedData = parseSlackMessage(message.text);
-          if (parsedData) {
-            await saveData(parsedData);
+      const options = {
+        channel: CHANNEL_ID,
+        limit: 1000 // Máximo permitido pela API do Slack
+      };
+
+      // Adicionar cursor se não for a primeira página
+      if (cursor) {
+        options.cursor = cursor;
+      }
+
+      const result = await slackClient.conversations.history(options);
+
+      if (result.messages && result.messages.length > 0) {
+        console.log(`   ✅ Encontradas ${result.messages.length} mensagens nesta página`);
+        allMessages = allMessages.concat(result.messages);
+
+        // Processar cada mensagem
+        for (const message of result.messages) {
+          if (message.text && (
+            message.text.includes('Relatório de Performance de Produtos') ||
+            message.text.includes('Relatório Time de Risco')
+          )) {
+            const parsedData = parseSlackMessage(message.text);
+            if (parsedData) {
+              await saveData(parsedData);
+            }
           }
         }
       }
-    } else {
-      console.log('⚠️ Nenhuma mensagem encontrada');
-    }
 
-    return result.messages;
+      // Verificar se há mais páginas
+      cursor = result.response_metadata?.next_cursor;
+
+      // Pequeno delay para respeitar rate limits do Slack
+      if (cursor) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo
+      }
+
+    } while (cursor);
+
+    console.log(`\n🎉 Busca completa! Total de ${allMessages.length} mensagens processadas em ${pageCount} páginas`);
+    return allMessages;
+
   } catch (error) {
     console.error('❌ Erro ao buscar mensagens:', error.message);
     console.error('📝 Detalhes do erro:', JSON.stringify(error.data, null, 2));
@@ -394,6 +509,76 @@ app.post('/api/test-parser', async (req, res) => {
 });
 
 /**
+ * Função para agregar dados por hora para análise
+ * Evita duplicidade e melhora a visualização
+ */
+function aggregateDataByHour(allData) {
+  const aggregated = {};
+
+  allData.forEach(item => {
+    const key = `${item.data}-${item.hora}-${item.tipoRelatorio}`;
+
+    if (!aggregated[key]) {
+      aggregated[key] = {
+        ...item,
+        count: 1,
+        valores: {
+          ggr: item.ggr ? [item.ggr] : [],
+          ngr: item.ngr ? [item.ngr] : [],
+          turnoverTotal: item.turnoverTotal ? [item.turnoverTotal] : [],
+          depositos: item.depositos ? [item.depositos] : [],
+          saques: item.saques ? [item.saques] : []
+        }
+      };
+    } else {
+      // Acumular valores
+      aggregated[key].count++;
+      if (item.ggr) aggregated[key].valores.ggr.push(item.ggr);
+      if (item.ngr) aggregated[key].valores.ngr.push(item.ngr);
+      if (item.turnoverTotal) aggregated[key].valores.turnoverTotal.push(item.turnoverTotal);
+      if (item.depositos) aggregated[key].valores.depositos.push(item.depositos);
+      if (item.saques) aggregated[key].valores.saques.push(item.saques);
+    }
+  });
+
+  // Calcular médias
+  return Object.values(aggregated).map(item => ({
+    timestamp: item.timestamp,
+    hora: item.hora,
+    data: item.data,
+    tipoRelatorio: item.tipoRelatorio,
+    count: item.count,
+    ggr: item.valores.ggr.length > 0 ? item.valores.ggr.reduce((a, b) => a + b) / item.valores.ggr.length : null,
+    ngr: item.valores.ngr.length > 0 ? item.valores.ngr.reduce((a, b) => a + b) / item.valores.ngr.length : null,
+    turnoverTotal: item.valores.turnoverTotal.length > 0 ? item.valores.turnoverTotal.reduce((a, b) => a + b) / item.valores.turnoverTotal.length : null,
+    depositos: item.valores.depositos.length > 0 ? item.valores.depositos.reduce((a, b) => a + b) / item.valores.depositos.length : null,
+    saques: item.valores.saques.length > 0 ? item.valores.saques.reduce((a, b) => a + b) / item.valores.saques.length : null,
+    cassinoGGR: item.cassinoGGR,
+    cassinoTurnover: item.cassinoTurnover,
+    sportsbookGGR: item.sportsbookGGR,
+    sportsbookTurnover: item.sportsbookTurnover,
+    fluxoLiquido: item.fluxoLiquido,
+    jogadoresUnicos: item.jogadoresUnicos,
+    apostadores: item.apostadores,
+    depositantes: item.depositantes,
+    // Novos campos adicionados
+    saldoInicial: item.saldoInicial,
+    saldoFinal: item.saldoFinal,
+    variacaoSaldo: item.variacaoSaldo,
+    depositoMedio: item.depositoMedio,
+    numeroMedioDepositos: item.numeroMedioDepositos,
+    saqueMedio: item.saqueMedio,
+    ticketMedio: item.ticketMedio,
+    ggrMedioJogador: item.ggrMedioJogador,
+    bonusConcedidos: item.bonusConcedidos,
+    bonusConvertidos: item.bonusConvertidos,
+    taxaConversaoBonus: item.taxaConversaoBonus,
+    apostasComBonus: item.apostasComBonus,
+    custoBonus: item.custoBonus
+  }));
+}
+
+/**
  * Endpoint para o dashboard frontend
  * Retorna dados processados e estatísticas
  */
@@ -410,22 +595,28 @@ app.get('/api/dashboard-data', async (req, res) => {
       console.log('Nenhum dado armazenado ainda');
     }
 
-    // Calcular estatísticas
-    const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    const todayData = allData.filter(item => item.data === today);
+    // Agregar dados por hora para melhor análise
+    const aggregatedData = aggregateDataByHour(allData);
+
+    // Calcular estatísticas usando timezone de Brasília
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const today = brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+    const todayData = aggregatedData.filter(item => item.data === today);
 
     const stats = {
-      totalAlertas: allData.length,
+      totalAlertas: aggregatedData.length,
       alertasHoje: todayData.length,
-      ultimoAlerta: allData.length > 0 ? allData[allData.length - 1] : null,
-      ultimaAtualizacao: new Date().toLocaleString('pt-BR')
+      ultimoAlerta: aggregatedData.length > 0 ? aggregatedData[aggregatedData.length - 1] : null,
+      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      totalRegistrosBrutos: allData.length // Para debug
     };
 
     res.json({
       success: true,
-      data: allData,
+      data: aggregatedData,
       stats: stats,
-      message: allData.length === 0 ? 'Nenhum dado disponível ainda. Aguardando mensagens do Slack.' : 'Dados carregados com sucesso'
+      message: aggregatedData.length === 0 ? 'Nenhum dado disponível ainda. Aguardando mensagens do Slack.' : `Dados carregados com sucesso (${allData.length} registros agregados em ${aggregatedData.length} períodos)`
     });
   } catch (error) {
     res.status(500).json({
