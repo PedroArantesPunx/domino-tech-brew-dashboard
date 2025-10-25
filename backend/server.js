@@ -509,13 +509,96 @@ app.post('/api/test-parser', async (req, res) => {
 });
 
 /**
+ * Função para calcular diferenças incrementais (valores acumulados do dia resetam à 00:00)
+ * Os valores do Slack são acumulados desde 00:00, então precisamos calcular a diferença
+ * entre períodos para obter o valor real de cada intervalo.
+ */
+function calculateIncrementalValues(allData) {
+  // Ordenar por data e hora
+  const sorted = [...allData].sort((a, b) => {
+    const dateA = new Date(a.timestamp);
+    const dateB = new Date(b.timestamp);
+    return dateA - dateB;
+  });
+
+  // Agrupar por data e tipo de relatório
+  const groupedByDay = {};
+
+  sorted.forEach(item => {
+    const dayKey = `${item.data}-${item.tipoRelatorio}`;
+    if (!groupedByDay[dayKey]) {
+      groupedByDay[dayKey] = [];
+    }
+    groupedByDay[dayKey].push(item);
+  });
+
+  // Calcular diferenças para cada dia
+  const result = [];
+
+  Object.values(groupedByDay).forEach(dayData => {
+    let previousValues = null;
+
+    dayData.forEach((current, index) => {
+      const processed = { ...current };
+
+      if (index === 0) {
+        // Primeiro registro do dia - usar valores como estão (são o inicial)
+        processed.ggrIncremental = current.ggr || 0;
+        processed.ngrIncremental = current.ngr || 0;
+        processed.depositosIncremental = current.depositos || 0;
+        processed.saquesIncremental = current.saques || 0;
+        processed.turnoverIncremental = current.turnoverTotal || 0;
+
+        // Manter valores originais acumulados também
+        processed.ggrAcumulado = current.ggr || 0;
+        processed.ngrAcumulado = current.ngr || 0;
+        processed.depositosAcumulado = current.depositos || 0;
+        processed.saquesAcumulado = current.saques || 0;
+
+        previousValues = current;
+      } else {
+        // Registros subsequentes - calcular diferença
+        processed.ggrIncremental = (current.ggr || 0) - (previousValues.ggr || 0);
+        processed.ngrIncremental = (current.ngr || 0) - (previousValues.ngr || 0);
+        processed.depositosIncremental = (current.depositos || 0) - (previousValues.depositos || 0);
+        processed.saquesIncremental = (current.saques || 0) - (previousValues.saques || 0);
+        processed.turnoverIncremental = (current.turnoverTotal || 0) - (previousValues.turnoverTotal || 0);
+
+        // Manter valores acumulados
+        processed.ggrAcumulado = current.ggr || 0;
+        processed.ngrAcumulado = current.ngr || 0;
+        processed.depositosAcumulado = current.depositos || 0;
+        processed.saquesAcumulado = current.saques || 0;
+
+        previousValues = current;
+      }
+
+      // Garantir que não temos valores negativos (pode acontecer se houver ajustes/correções)
+      processed.ggrIncremental = Math.max(0, processed.ggrIncremental);
+      processed.ngrIncremental = Math.max(0, processed.ngrIncremental);
+      processed.depositosIncremental = Math.max(0, processed.depositosIncremental);
+      processed.saquesIncremental = Math.max(0, processed.saquesIncremental);
+      processed.turnoverIncremental = Math.max(0, processed.turnoverIncremental);
+
+      result.push(processed);
+    });
+  });
+
+  return result;
+}
+
+/**
  * Função para agregar dados por hora para análise
  * Evita duplicidade e melhora a visualização
+ * ATUALIZADO: Agora usa valores incrementais ao invés de acumulados
  */
 function aggregateDataByHour(allData) {
+  // Primeiro calcular valores incrementais
+  const incrementalData = calculateIncrementalValues(allData);
+
   const aggregated = {};
 
-  allData.forEach(item => {
+  incrementalData.forEach(item => {
     const key = `${item.data}-${item.hora}-${item.tipoRelatorio}`;
 
     if (!aggregated[key]) {
@@ -523,36 +606,46 @@ function aggregateDataByHour(allData) {
         ...item,
         count: 1,
         valores: {
-          ggr: item.ggr ? [item.ggr] : [],
-          ngr: item.ngr ? [item.ngr] : [],
-          turnoverTotal: item.turnoverTotal ? [item.turnoverTotal] : [],
-          depositos: item.depositos ? [item.depositos] : [],
-          saques: item.saques ? [item.saques] : []
+          ggr: item.ggrIncremental ? [item.ggrIncremental] : [],
+          ngr: item.ngrIncremental ? [item.ngrIncremental] : [],
+          turnoverTotal: item.turnoverIncremental ? [item.turnoverIncremental] : [],
+          depositos: item.depositosIncremental ? [item.depositosIncremental] : [],
+          saques: item.saquesIncremental ? [item.saquesIncremental] : []
         }
       };
     } else {
-      // Acumular valores
+      // Acumular valores incrementais
       aggregated[key].count++;
-      if (item.ggr) aggregated[key].valores.ggr.push(item.ggr);
-      if (item.ngr) aggregated[key].valores.ngr.push(item.ngr);
-      if (item.turnoverTotal) aggregated[key].valores.turnoverTotal.push(item.turnoverTotal);
-      if (item.depositos) aggregated[key].valores.depositos.push(item.depositos);
-      if (item.saques) aggregated[key].valores.saques.push(item.saques);
+      if (item.ggrIncremental) aggregated[key].valores.ggr.push(item.ggrIncremental);
+      if (item.ngrIncremental) aggregated[key].valores.ngr.push(item.ngrIncremental);
+      if (item.turnoverIncremental) aggregated[key].valores.turnoverTotal.push(item.turnoverIncremental);
+      if (item.depositosIncremental) aggregated[key].valores.depositos.push(item.depositosIncremental);
+      if (item.saquesIncremental) aggregated[key].valores.saques.push(item.saquesIncremental);
     }
   });
 
-  // Calcular médias
+  // Calcular médias dos valores incrementais
   return Object.values(aggregated).map(item => ({
     timestamp: item.timestamp,
     hora: item.hora,
     data: item.data,
     tipoRelatorio: item.tipoRelatorio,
     count: item.count,
+
+    // Valores incrementais (diferença do período)
     ggr: item.valores.ggr.length > 0 ? item.valores.ggr.reduce((a, b) => a + b) / item.valores.ggr.length : null,
     ngr: item.valores.ngr.length > 0 ? item.valores.ngr.reduce((a, b) => a + b) / item.valores.ngr.length : null,
     turnoverTotal: item.valores.turnoverTotal.length > 0 ? item.valores.turnoverTotal.reduce((a, b) => a + b) / item.valores.turnoverTotal.length : null,
     depositos: item.valores.depositos.length > 0 ? item.valores.depositos.reduce((a, b) => a + b) / item.valores.depositos.length : null,
     saques: item.valores.saques.length > 0 ? item.valores.saques.reduce((a, b) => a + b) / item.valores.saques.length : null,
+
+    // Valores acumulados (para referência)
+    ggrAcumulado: item.ggrAcumulado,
+    ngrAcumulado: item.ngrAcumulado,
+    depositosAcumulado: item.depositosAcumulado,
+    saquesAcumulado: item.saquesAcumulado,
+
+    // Outros campos (não são acumulados)
     cassinoGGR: item.cassinoGGR,
     cassinoTurnover: item.cassinoTurnover,
     sportsbookGGR: item.sportsbookGGR,
@@ -561,7 +654,6 @@ function aggregateDataByHour(allData) {
     jogadoresUnicos: item.jogadoresUnicos,
     apostadores: item.apostadores,
     depositantes: item.depositantes,
-    // Novos campos adicionados
     saldoInicial: item.saldoInicial,
     saldoFinal: item.saldoFinal,
     variacaoSaldo: item.variacaoSaldo,
