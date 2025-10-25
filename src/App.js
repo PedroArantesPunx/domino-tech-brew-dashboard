@@ -96,13 +96,42 @@ const App = () => {
   const filteredData = useMemo(() => {
     if (!data || data.length === 0) return [];
     let filtered = [...data];
+
+    // Aplicar filtro de tipo primeiro
     if (tipoFilter === 'performance') filtered = filtered.filter(item => item.tipoRelatorio === 'Performance de Produtos');
     else if (tipoFilter === 'risco') filtered = filtered.filter(item => item.tipoRelatorio === 'Time de Risco');
+
+    // Aplicar filtro de período
     if (periodFilter === 'today') {
-      const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-      filtered = filtered.filter(item => item.data === today);
-    } else if (periodFilter === 'last20') filtered = filtered.slice(-20);
-    else if (periodFilter === 'last50') filtered = filtered.slice(-50);
+      // Usar a última data disponível nos dados ao invés da data atual
+      if (filtered.length > 0) {
+        const lastDate = filtered[filtered.length - 1].data;
+        filtered = filtered.filter(item => item.data === lastDate);
+      }
+    } else if (periodFilter === 'yesterday') {
+      // Segunda última data disponível
+      if (filtered.length > 0) {
+        const uniqueDates = [...new Set(filtered.map(item => item.data))].sort();
+        if (uniqueDates.length >= 2) {
+          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
+          filtered = filtered.filter(item => item.data === yesterdayDate);
+        }
+      }
+    } else if (periodFilter === 'last7days') {
+      // Últimos 7 dias únicos
+      if (filtered.length > 0) {
+        const uniqueDates = [...new Set(filtered.map(item => item.data))].sort();
+        const last7Dates = uniqueDates.slice(-7);
+        filtered = filtered.filter(item => last7Dates.includes(item.data));
+      }
+    } else if (periodFilter === 'last20') {
+      filtered = filtered.slice(-20);
+    } else if (periodFilter === 'last50') {
+      filtered = filtered.slice(-50);
+    } else if (periodFilter === 'last100') {
+      filtered = filtered.slice(-100);
+    }
+
     return filtered;
   }, [data, periodFilter, tipoFilter]);
 
@@ -730,9 +759,12 @@ const App = () => {
                 }}
               >
                 <option value="all">📊 Todo Histórico ({data.length})</option>
-                <option value="today">📆 Hoje</option>
-                <option value="last20">📉 Últimos 20</option>
-                <option value="last50">📈 Últimos 50</option>
+                <option value="today">📆 Último Dia Disponível</option>
+                <option value="yesterday">📅 Penúltimo Dia</option>
+                <option value="last7days">📅 Últimos 7 Dias</option>
+                <option value="last20">📉 Últimos 20 Períodos</option>
+                <option value="last50">📈 Últimos 50 Períodos</option>
+                <option value="last100">📊 Últimos 100 Períodos</option>
               </select>
             </div>
             <div>
