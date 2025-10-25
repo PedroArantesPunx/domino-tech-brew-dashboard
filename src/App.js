@@ -173,25 +173,102 @@ const App = () => {
   }, [filteredData]);
 
   const produtosData = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return null;
-    const perfData = filteredData.filter(item => item.tipoRelatorio === 'Performance de Produtos' && item.cassinoGGR && item.sportsbookGGR);
+    if (!data || data.length === 0) return null;
+
+    // Filtrar apenas dados de Performance de Produtos
+    let perfData = data.filter(item =>
+      item.tipoRelatorio === 'Performance de Produtos' &&
+      item.cassinoGGR &&
+      item.sportsbookGGR
+    );
+
     if (perfData.length === 0) return null;
-    const latest = perfData[perfData.length - 1];
-    const total = latest.cassinoGGR + latest.sportsbookGGR;
+
+    // Aplicar filtros de período nos dados de produtos
+    if (periodFilter === 'today') {
+      if (perfData.length > 0) {
+        const lastDate = perfData[perfData.length - 1].data;
+        perfData = perfData.filter(item => item.data === lastDate);
+      }
+    } else if (periodFilter === 'yesterday') {
+      if (perfData.length > 0) {
+        const uniqueDates = [...new Set(perfData.map(item => item.data))].sort();
+        if (uniqueDates.length >= 2) {
+          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
+          perfData = perfData.filter(item => item.data === yesterdayDate);
+        }
+      }
+    } else if (periodFilter === 'last7days') {
+      if (perfData.length > 0) {
+        const uniqueDates = [...new Set(perfData.map(item => item.data))].sort();
+        const last7Dates = uniqueDates.slice(-7);
+        perfData = perfData.filter(item => last7Dates.includes(item.data));
+      }
+    } else if (periodFilter === 'last20') {
+      perfData = perfData.slice(-20);
+    } else if (periodFilter === 'last50') {
+      perfData = perfData.slice(-50);
+    } else if (periodFilter === 'last100') {
+      perfData = perfData.slice(-100);
+    }
+
+    // Calcular totais agregados do período filtrado
+    const totalCassinoGGR = perfData.reduce((sum, item) => sum + (item.cassinoGGR || 0), 0);
+    const totalSportsbookGGR = perfData.reduce((sum, item) => sum + (item.sportsbookGGR || 0), 0);
+    const total = totalCassinoGGR + totalSportsbookGGR;
+
     return {
-      cassino: { value: latest.cassinoGGR, percent: (latest.cassinoGGR / total) * 100 },
-      sportsbook: { value: latest.sportsbookGGR, percent: (latest.sportsbookGGR / total) * 100 }
+      cassino: {
+        value: totalCassinoGGR,
+        percent: (totalCassinoGGR / total) * 100
+      },
+      sportsbook: {
+        value: totalSportsbookGGR,
+        percent: (totalSportsbookGGR / total) * 100
+      },
+      count: perfData.length
     };
-  }, [filteredData]);
+  }, [data, periodFilter]);
 
   const bonusData = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return null;
-    const bonusItems = filteredData.filter(item =>
+    if (!data || data.length === 0) return null;
+
+    // Filtrar apenas dados de Time de Risco
+    let bonusItems = data.filter(item =>
       item.tipoRelatorio === 'Time de Risco' &&
       item.bonusConcedidos !== null &&
       item.bonusConcedidos !== undefined
     );
+
     if (bonusItems.length === 0) return null;
+
+    // Aplicar filtros de período nos dados de bônus
+    if (periodFilter === 'today') {
+      if (bonusItems.length > 0) {
+        const lastDate = bonusItems[bonusItems.length - 1].data;
+        bonusItems = bonusItems.filter(item => item.data === lastDate);
+      }
+    } else if (periodFilter === 'yesterday') {
+      if (bonusItems.length > 0) {
+        const uniqueDates = [...new Set(bonusItems.map(item => item.data))].sort();
+        if (uniqueDates.length >= 2) {
+          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
+          bonusItems = bonusItems.filter(item => item.data === yesterdayDate);
+        }
+      }
+    } else if (periodFilter === 'last7days') {
+      if (bonusItems.length > 0) {
+        const uniqueDates = [...new Set(bonusItems.map(item => item.data))].sort();
+        const last7Dates = uniqueDates.slice(-7);
+        bonusItems = bonusItems.filter(item => last7Dates.includes(item.data));
+      }
+    } else if (periodFilter === 'last20') {
+      bonusItems = bonusItems.slice(-20);
+    } else if (periodFilter === 'last50') {
+      bonusItems = bonusItems.slice(-50);
+    } else if (periodFilter === 'last100') {
+      bonusItems = bonusItems.slice(-100);
+    }
 
     const totalConcedidos = bonusItems.reduce((sum, item) => sum + (item.bonusConcedidos || 0), 0);
     const totalConvertidos = bonusItems.reduce((sum, item) => sum + (item.bonusConvertidos || 0), 0);
@@ -216,7 +293,7 @@ const App = () => {
       chartData,
       count: bonusItems.length
     };
-  }, [filteredData]);
+  }, [data, periodFilter]);
 
   const exportToCSV = () => {
     if (!filteredData || filteredData.length === 0) {
@@ -1135,11 +1212,20 @@ const App = () => {
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-              marginBottom: '32px',
+              marginBottom: '16px',
               textAlign: 'center'
             }}>
               🎁 Dashboard de Bônus
             </h2>
+            <p style={{
+              textAlign: 'center',
+              color: colors.text.secondary,
+              fontSize: '14px',
+              marginBottom: '32px',
+              fontWeight: '600'
+            }}>
+              {bonusData.count} períodos analisados
+            </p>
 
             {/* KPI Cards Bônus */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
@@ -1264,11 +1350,20 @@ const App = () => {
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-              marginBottom: '32px',
+              marginBottom: '16px',
               textAlign: 'center'
             }}>
               🎰 Dashboard de Produtos
             </h2>
+            <p style={{
+              textAlign: 'center',
+              color: colors.text.secondary,
+              fontSize: '14px',
+              marginBottom: '32px',
+              fontWeight: '600'
+            }}>
+              {produtosData.count} períodos • GGR Total Agregado
+            </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px', marginBottom: '40px' }}>
               <GlassCard>
