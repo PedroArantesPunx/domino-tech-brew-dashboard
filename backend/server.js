@@ -46,12 +46,22 @@ const DATA_FILE = path.join(__dirname, 'alertas.json');
 /**
  * Função para extrair dados da mensagem do Slack
  * Suporta dois formatos: "Relatório de Performance de Produtos" e "Relatório Time de Risco"
+ * @param {string} text - Texto da mensagem
+ * @param {string} slackTimestamp - Timestamp do Slack (formato UNIX timestamp com decimais)
  */
-function parseSlackMessage(text) {
+function parseSlackMessage(text, slackTimestamp = null) {
   try {
-    // Usar timezone de Brasília (UTC-3)
-    const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    // Usar o timestamp da mensagem do Slack se fornecido, senão usar hora atual
+    let messageTime;
+    if (slackTimestamp) {
+      // Converter timestamp do Slack (UNIX timestamp em segundos) para milissegundos
+      messageTime = new Date(parseFloat(slackTimestamp) * 1000);
+    } else {
+      messageTime = new Date();
+    }
+
+    // Converter para timezone de Brasília (UTC-3)
+    const brasiliaTime = new Date(messageTime.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
     const data = {
       timestamp: brasiliaTime.toISOString(),
@@ -314,7 +324,8 @@ async function fetchSlackMessages() {
             message.text.includes('Relatório de Performance de Produtos') ||
             message.text.includes('Relatório Time de Risco')
           )) {
-            const parsedData = parseSlackMessage(message.text);
+            // Passar o timestamp da mensagem do Slack para preservar a data/hora original
+            const parsedData = parseSlackMessage(message.text, message.ts);
             if (parsedData) {
               await saveData(parsedData);
             }
