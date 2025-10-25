@@ -35,7 +35,7 @@ jobs:
           tags: pedropunx/domino-tech-backend:latest,pedropunx/domino-tech-backend:${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.65.0
         with:
           image-ref: 'pedropunx/domino-tech-backend:latest'
           format: 'table'
