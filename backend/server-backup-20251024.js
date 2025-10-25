@@ -46,22 +46,12 @@ const DATA_FILE = path.join(__dirname, 'alertas.json');
 /**
  * Função para extrair dados da mensagem do Slack
  * Suporta dois formatos: "Relatório de Performance de Produtos" e "Relatório Time de Risco"
- * @param {string} text - Texto da mensagem
- * @param {string} slackTimestamp - Timestamp do Slack (formato UNIX timestamp com decimais)
  */
-function parseSlackMessage(text, slackTimestamp = null) {
+function parseSlackMessage(text) {
   try {
-    // Usar o timestamp da mensagem do Slack se fornecido, senão usar hora atual
-    let messageTime;
-    if (slackTimestamp) {
-      // Converter timestamp do Slack (UNIX timestamp em segundos) para milissegundos
-      messageTime = new Date(parseFloat(slackTimestamp) * 1000);
-    } else {
-      messageTime = new Date();
-    }
-
-    // Converter para timezone de Brasília (UTC-3)
-    const brasiliaTime = new Date(messageTime.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    // Usar timezone de Brasília (UTC-3)
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
     const data = {
       timestamp: brasiliaTime.toISOString(),
@@ -102,11 +92,6 @@ function parseSlackMessage(text, slackTimestamp = null) {
         data.cassinoGGR = parseFloat(cassinoGGRMatch[1].replace(/\./g, '').replace(',', '.'));
       }
 
-      const cassinoNGRMatch = text.match(/CASSINO[\s\S]*?Lucro Líquido \(NGR\):.*?R\$\s*([0-9,\.]+)/);
-      if (cassinoNGRMatch) {
-        data.cassinoNGR = parseFloat(cassinoNGRMatch[1].replace(/\./g, '').replace(',', '.'));
-      }
-
       // Extrair dados do Sportsbook
       const sportsTurnoverMatch = text.match(/SPORTSBOOK[\s\S]*?Turnover:.*?R\$\s*([0-9,\.]+)/);
       if (sportsTurnoverMatch) {
@@ -116,20 +101,6 @@ function parseSlackMessage(text, slackTimestamp = null) {
       const sportsGGRMatch = text.match(/SPORTSBOOK[\s\S]*?Lucro Bruto \(GGR\):.*?R\$\s*([0-9,\.]+)/);
       if (sportsGGRMatch) {
         data.sportsbookGGR = parseFloat(sportsGGRMatch[1].replace(/\./g, '').replace(',', '.'));
-      }
-
-      const sportsNGRMatch = text.match(/SPORTSBOOK[\s\S]*?Lucro Líquido \(NGR\):.*?R\$\s*([0-9,\.]+)/);
-      if (sportsNGRMatch) {
-        data.sportsbookNGR = parseFloat(sportsNGRMatch[1].replace(/\./g, '').replace(',', '.'));
-      }
-
-      // Se NGR não foi extraído separadamente, calcular proporcionalmente
-      if (!data.cassinoNGR && !data.sportsbookNGR && data.ngr && data.cassinoGGR && data.sportsbookGGR) {
-        const totalGGR = data.cassinoGGR + data.sportsbookGGR;
-        if (totalGGR > 0) {
-          data.cassinoNGR = data.ngr * (data.cassinoGGR / totalGGR);
-          data.sportsbookNGR = data.ngr * (data.sportsbookGGR / totalGGR);
-        }
       }
 
     } else if (text.includes('Relatório Time de Risco')) {
@@ -343,8 +314,7 @@ async function fetchSlackMessages() {
             message.text.includes('Relatório de Performance de Produtos') ||
             message.text.includes('Relatório Time de Risco')
           )) {
-            // Passar o timestamp da mensagem do Slack para preservar a data/hora original
-            const parsedData = parseSlackMessage(message.text, message.ts);
+            const parsedData = parseSlackMessage(message.text);
             if (parsedData) {
               await saveData(parsedData);
             }

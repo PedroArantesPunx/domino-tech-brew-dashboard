@@ -16,7 +16,6 @@ const App = () => {
 
   const [periodFilter, setPeriodFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
-  const [activeDashboard, setActiveDashboard] = useState('overview'); // overview, bonus, produtos
 
   // ==== PALETA INSPIRADA EM SEGURO.BET.BR ====
   const colors = {
@@ -96,42 +95,13 @@ const App = () => {
   const filteredData = useMemo(() => {
     if (!data || data.length === 0) return [];
     let filtered = [...data];
-
-    // Aplicar filtro de tipo primeiro
     if (tipoFilter === 'performance') filtered = filtered.filter(item => item.tipoRelatorio === 'Performance de Produtos');
     else if (tipoFilter === 'risco') filtered = filtered.filter(item => item.tipoRelatorio === 'Time de Risco');
-
-    // Aplicar filtro de período
     if (periodFilter === 'today') {
-      // Usar a última data disponível nos dados ao invés da data atual
-      if (filtered.length > 0) {
-        const lastDate = filtered[filtered.length - 1].data;
-        filtered = filtered.filter(item => item.data === lastDate);
-      }
-    } else if (periodFilter === 'yesterday') {
-      // Segunda última data disponível
-      if (filtered.length > 0) {
-        const uniqueDates = [...new Set(filtered.map(item => item.data))].sort();
-        if (uniqueDates.length >= 2) {
-          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
-          filtered = filtered.filter(item => item.data === yesterdayDate);
-        }
-      }
-    } else if (periodFilter === 'last7days') {
-      // Últimos 7 dias únicos
-      if (filtered.length > 0) {
-        const uniqueDates = [...new Set(filtered.map(item => item.data))].sort();
-        const last7Dates = uniqueDates.slice(-7);
-        filtered = filtered.filter(item => last7Dates.includes(item.data));
-      }
-    } else if (periodFilter === 'last20') {
-      filtered = filtered.slice(-20);
-    } else if (periodFilter === 'last50') {
-      filtered = filtered.slice(-50);
-    } else if (periodFilter === 'last100') {
-      filtered = filtered.slice(-100);
-    }
-
+      const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      filtered = filtered.filter(item => item.data === today);
+    } else if (periodFilter === 'last20') filtered = filtered.slice(-20);
+    else if (periodFilter === 'last50') filtered = filtered.slice(-50);
     return filtered;
   }, [data, periodFilter, tipoFilter]);
 
@@ -173,149 +143,16 @@ const App = () => {
   }, [filteredData]);
 
   const produtosData = useMemo(() => {
-    if (!data || data.length === 0) return null;
-
-    // Filtrar apenas dados de Performance de Produtos
-    let perfData = data.filter(item =>
-      item.tipoRelatorio === 'Performance de Produtos' &&
-      item.cassinoGGR &&
-      item.sportsbookGGR
-    );
-
+    if (!filteredData || filteredData.length === 0) return null;
+    const perfData = filteredData.filter(item => item.tipoRelatorio === 'Performance de Produtos' && item.cassinoGGR && item.sportsbookGGR);
     if (perfData.length === 0) return null;
-
-    // Aplicar filtros de período nos dados de produtos
-    if (periodFilter === 'today') {
-      if (perfData.length > 0) {
-        const lastDate = perfData[perfData.length - 1].data;
-        perfData = perfData.filter(item => item.data === lastDate);
-      }
-    } else if (periodFilter === 'yesterday') {
-      if (perfData.length > 0) {
-        const uniqueDates = [...new Set(perfData.map(item => item.data))].sort();
-        if (uniqueDates.length >= 2) {
-          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
-          perfData = perfData.filter(item => item.data === yesterdayDate);
-        }
-      }
-    } else if (periodFilter === 'last7days') {
-      if (perfData.length > 0) {
-        const uniqueDates = [...new Set(perfData.map(item => item.data))].sort();
-        const last7Dates = uniqueDates.slice(-7);
-        perfData = perfData.filter(item => last7Dates.includes(item.data));
-      }
-    } else if (periodFilter === 'last20') {
-      perfData = perfData.slice(-20);
-    } else if (periodFilter === 'last50') {
-      perfData = perfData.slice(-50);
-    } else if (periodFilter === 'last100') {
-      perfData = perfData.slice(-100);
-    }
-
-    // Calcular totais agregados do período filtrado para Cassino
-    const totalCassinoTurnover = perfData.reduce((sum, item) => sum + (item.cassinoTurnover || 0), 0);
-    const totalCassinoGGR = perfData.reduce((sum, item) => sum + (item.cassinoGGR || 0), 0);
-    const totalCassinoNGR = perfData.reduce((sum, item) => sum + (item.cassinoNGR || 0), 0);
-
-    // Calcular totais agregados do período filtrado para Sportsbook
-    const totalSportsbookTurnover = perfData.reduce((sum, item) => sum + (item.sportsbookTurnover || 0), 0);
-    const totalSportsbookGGR = perfData.reduce((sum, item) => sum + (item.sportsbookGGR || 0), 0);
-    const totalSportsbookNGR = perfData.reduce((sum, item) => sum + (item.sportsbookNGR || 0), 0);
-
-    // Calcular totais gerais
-    const totalTurnover = perfData.reduce((sum, item) => sum + (item.turnoverTotal || 0), 0);
-    const totalGGR = perfData.reduce((sum, item) => sum + (item.ggr || 0), 0);
-    const totalNGR = perfData.reduce((sum, item) => sum + (item.ngr || 0), 0);
-
-    // Calcular percentuais (baseado em GGR)
-    const ggrTotal = totalCassinoGGR + totalSportsbookGGR;
-
+    const latest = perfData[perfData.length - 1];
+    const total = latest.cassinoGGR + latest.sportsbookGGR;
     return {
-      cassino: {
-        turnover: totalCassinoTurnover,
-        ggr: totalCassinoGGR,
-        ngr: totalCassinoNGR,
-        percent: ggrTotal > 0 ? (totalCassinoGGR / ggrTotal) * 100 : 0
-      },
-      sportsbook: {
-        turnover: totalSportsbookTurnover,
-        ggr: totalSportsbookGGR,
-        ngr: totalSportsbookNGR,
-        percent: ggrTotal > 0 ? (totalSportsbookGGR / ggrTotal) * 100 : 0
-      },
-      totalGeral: {
-        turnover: totalTurnover,
-        ggr: totalGGR,
-        ngr: totalNGR
-      },
-      count: perfData.length
+      cassino: { value: latest.cassinoGGR, percent: (latest.cassinoGGR / total) * 100 },
+      sportsbook: { value: latest.sportsbookGGR, percent: (latest.sportsbookGGR / total) * 100 }
     };
-  }, [data, periodFilter]);
-
-  const bonusData = useMemo(() => {
-    if (!data || data.length === 0) return null;
-
-    // Filtrar apenas dados de Time de Risco
-    let bonusItems = data.filter(item =>
-      item.tipoRelatorio === 'Time de Risco' &&
-      item.bonusConcedidos !== null &&
-      item.bonusConcedidos !== undefined
-    );
-
-    if (bonusItems.length === 0) return null;
-
-    // Aplicar filtros de período nos dados de bônus
-    if (periodFilter === 'today') {
-      if (bonusItems.length > 0) {
-        const lastDate = bonusItems[bonusItems.length - 1].data;
-        bonusItems = bonusItems.filter(item => item.data === lastDate);
-      }
-    } else if (periodFilter === 'yesterday') {
-      if (bonusItems.length > 0) {
-        const uniqueDates = [...new Set(bonusItems.map(item => item.data))].sort();
-        if (uniqueDates.length >= 2) {
-          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
-          bonusItems = bonusItems.filter(item => item.data === yesterdayDate);
-        }
-      }
-    } else if (periodFilter === 'last7days') {
-      if (bonusItems.length > 0) {
-        const uniqueDates = [...new Set(bonusItems.map(item => item.data))].sort();
-        const last7Dates = uniqueDates.slice(-7);
-        bonusItems = bonusItems.filter(item => last7Dates.includes(item.data));
-      }
-    } else if (periodFilter === 'last20') {
-      bonusItems = bonusItems.slice(-20);
-    } else if (periodFilter === 'last50') {
-      bonusItems = bonusItems.slice(-50);
-    } else if (periodFilter === 'last100') {
-      bonusItems = bonusItems.slice(-100);
-    }
-
-    const totalConcedidos = bonusItems.reduce((sum, item) => sum + (item.bonusConcedidos || 0), 0);
-    const totalConvertidos = bonusItems.reduce((sum, item) => sum + (item.bonusConvertidos || 0), 0);
-    const totalApostasBonus = bonusItems.reduce((sum, item) => sum + (item.apostasComBonus || 0), 0);
-    const totalCusto = bonusItems.reduce((sum, item) => sum + (item.custoBonus || 0), 0);
-    const avgTaxaConversao = bonusItems.reduce((sum, item) => sum + (item.taxaConversaoBonus || 0), 0) / bonusItems.length;
-
-    const chartData = bonusItems.map(item => ({
-      label: `${item.data} ${item.hora}`,
-      Concedidos: item.bonusConcedidos || 0,
-      Convertidos: item.bonusConvertidos || 0,
-      Taxa: item.taxaConversaoBonus || 0,
-      Custo: item.custoBonus || 0
-    }));
-
-    return {
-      totalConcedidos,
-      totalConvertidos,
-      totalApostasBonus,
-      totalCusto,
-      avgTaxaConversao,
-      chartData,
-      count: bonusItems.length
-    };
-  }, [data, periodFilter]);
+  }, [filteredData]);
 
   const exportToCSV = () => {
     if (!filteredData || filteredData.length === 0) {
@@ -723,64 +560,6 @@ const App = () => {
         </div>
       </div>
 
-      {/* ==== NAVIGATION TABS ==== */}
-      <div style={{
-        maxWidth: '1600px',
-        margin: '0 auto',
-        padding: '0 24px',
-        position: 'relative',
-        zIndex: 10
-      }}>
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          borderBottom: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
-          paddingBottom: '0'
-        }}>
-          {[
-            { id: 'overview', label: '📊 Overview', icon: '📊' },
-            { id: 'bonus', label: '🎁 Bônus', icon: '🎁' },
-            { id: 'produtos', label: '🎰 Produtos', icon: '🎰' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveDashboard(tab.id)}
-              style={{
-                padding: '16px 32px',
-                background: activeDashboard === tab.id
-                  ? (darkMode ? colors.gradients.gold : colors.gradients.gold)
-                  : 'transparent',
-                color: activeDashboard === tab.id ? '#000' : colors.text.secondary,
-                border: 'none',
-                borderRadius: '12px 12px 0 0',
-                cursor: 'pointer',
-                fontWeight: '800',
-                fontSize: '15px',
-                transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                position: 'relative',
-                boxShadow: activeDashboard === tab.id ? `0 -4px 20px ${colors.gold}40` : 'none',
-                transform: activeDashboard === tab.id ? 'translateY(2px)' : 'translateY(0)',
-                backdropFilter: activeDashboard === tab.id ? 'blur(10px)' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (activeDashboard !== tab.id) {
-                  e.currentTarget.style.color = colors.text.primary;
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeDashboard !== tab.id) {
-                  e.currentTarget.style.color = colors.text.secondary;
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ==== MAIN CONTENT ==== */}
       <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '40px 24px', position: 'relative', zIndex: 1 }}>
 
@@ -858,12 +637,9 @@ const App = () => {
                 }}
               >
                 <option value="all">📊 Todo Histórico ({data.length})</option>
-                <option value="today">📆 Último Dia Disponível</option>
-                <option value="yesterday">📅 Penúltimo Dia</option>
-                <option value="last7days">📅 Últimos 7 Dias</option>
-                <option value="last20">📉 Últimos 20 Períodos</option>
-                <option value="last50">📈 Últimos 50 Períodos</option>
-                <option value="last100">📊 Últimos 100 Períodos</option>
+                <option value="today">📆 Hoje</option>
+                <option value="last20">📉 Últimos 20</option>
+                <option value="last50">📈 Últimos 50</option>
               </select>
             </div>
             <div>
@@ -943,9 +719,6 @@ const App = () => {
           </div>
         </GlassCard>
 
-        {/* ==== DASHBOARD OVERVIEW ==== */}
-        {activeDashboard === 'overview' && (
-          <>
         {/* ==== KPI CARDS COM NEON ==== */}
         {metrics && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '40px' }}>
@@ -1107,8 +880,8 @@ const App = () => {
                       </defs>
                       <Pie
                         data={[
-                          { name: 'Cassino', value: produtosData.cassino.ggr, fill: 'url(#cassinoGradient)' },
-                          { name: 'Sportsbook', value: produtosData.sportsbook.ggr, fill: 'url(#sportsbookGradient)' }
+                          { name: 'Cassino', value: produtosData.cassino.value, fill: 'url(#cassinoGradient)' },
+                          { name: 'Sportsbook', value: produtosData.sportsbook.value, fill: 'url(#sportsbookGradient)' }
                         ]}
                         cx="50%"
                         cy="50%"
@@ -1137,7 +910,7 @@ const App = () => {
                         {produtosData.cassino.percent.toFixed(1)}%
                       </div>
                       <div style={{ fontSize: '13px', color: colors.text.tertiary, marginTop: '4px', fontWeight: '600' }}>
-                        R$ {produtosData.cassino.ggr.toLocaleString('pt-BR')}
+                        R$ {produtosData.cassino.value.toLocaleString('pt-BR')}
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -1146,7 +919,7 @@ const App = () => {
                         {produtosData.sportsbook.percent.toFixed(1)}%
                       </div>
                       <div style={{ fontSize: '13px', color: colors.text.tertiary, marginTop: '4px', fontWeight: '600' }}>
-                        R$ {produtosData.sportsbook.ggr.toLocaleString('pt-BR')}
+                        R$ {produtosData.sportsbook.value.toLocaleString('pt-BR')}
                       </div>
                     </div>
                   </div>
@@ -1217,354 +990,6 @@ const App = () => {
                     />
                   </BarChart>
                 </ResponsiveContainer>
-              </GlassCard>
-            </div>
-          </>
-        )}
-          </>
-        )}
-
-        {/* ==== DASHBOARD BÔNUS ==== */}
-        {activeDashboard === 'bonus' && bonusData && (
-          <>
-            <h2 style={{
-              fontSize: '28px',
-              fontWeight: '900',
-              background: colors.gradients.gold,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              marginBottom: '16px',
-              textAlign: 'center'
-            }}>
-              🎁 Dashboard de Bônus
-            </h2>
-            <p style={{
-              textAlign: 'center',
-              color: colors.text.secondary,
-              fontSize: '14px',
-              marginBottom: '32px',
-              fontWeight: '600'
-            }}>
-              {bonusData.count} períodos analisados
-            </p>
-
-            {/* KPI Cards Bônus */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
-              <StatCard
-                title="🎁 Total Concedido"
-                value={`R$ ${bonusData.totalConcedidos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
-                icon="💰"
-                gradient={colors.gradients.gold}
-              />
-              <StatCard
-                title="✅ Total Convertido"
-                value={`R$ ${bonusData.totalConvertidos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
-                icon="💸"
-                gradient={colors.gradients.lime}
-              />
-              <StatCard
-                title="📊 Taxa de Conversão"
-                value={bonusData.avgTaxaConversao.toFixed(1)}
-                unit="%"
-                icon="📈"
-                gradient={colors.gradients.purple}
-              />
-              <StatCard
-                title="💲 Custo Total"
-                value={`R$ ${bonusData.totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
-                icon="💳"
-                gradient={colors.gradients.blueGreen}
-              />
-            </div>
-
-            {/* Gráficos de Bônus */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '40px' }}>
-              <GlassCard>
-                <h3 style={{
-                  color: colors.text.primary,
-                  fontSize: '18px',
-                  fontWeight: '800',
-                  marginBottom: '24px',
-                  background: colors.gradients.gold,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  📊 Bônus Concedidos vs Convertidos
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart data={bonusData.chartData}>
-                    <defs>
-                      <linearGradient id="concedidosGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={colors.gold} stopOpacity={0.8} />
-                        <stop offset="100%" stopColor={colors.gold} stopOpacity={0.1} />
-                      </linearGradient>
-                      <linearGradient id="convertidosGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={colors.lime} stopOpacity={0.8} />
-                        <stop offset="100%" stopColor={colors.lime} stopOpacity={0.1} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
-                    <XAxis dataKey="label" angle={-45} textAnchor="end" height={80} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
-                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
-                    <Tooltip contentStyle={{
-                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-                      borderRadius: '12px',
-                      backdropFilter: 'blur(20px)',
-                      fontWeight: '600'
-                    }} />
-                    <Legend />
-                    <Area type="monotone" dataKey="Concedidos" stroke={colors.gold} fill="url(#concedidosGrad)" strokeWidth={3} />
-                    <Area type="monotone" dataKey="Convertidos" stroke={colors.lime} fill="url(#convertidosGrad)" strokeWidth={3} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </GlassCard>
-
-              <GlassCard>
-                <h3 style={{
-                  color: colors.text.primary,
-                  fontSize: '18px',
-                  fontWeight: '800',
-                  marginBottom: '24px',
-                  background: colors.gradients.purple,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  📈 Taxa de Conversão ao Longo do Tempo
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={bonusData.chartData}>
-                    <defs>
-                      <linearGradient id="taxaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={colors.purple} />
-                        <stop offset="100%" stopColor={colors.cyan} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
-                    <XAxis dataKey="label" angle={-45} textAnchor="end" height={80} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
-                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
-                    <Tooltip contentStyle={{
-                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-                      borderRadius: '12px',
-                      backdropFilter: 'blur(20px)',
-                      fontWeight: '600'
-                    }} />
-                    <Legend />
-                    <Line type="monotone" dataKey="Taxa" stroke="url(#taxaGrad)" strokeWidth={4} dot={{ r: 6, fill: colors.purple }} name="Taxa de Conversão (%)" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </GlassCard>
-            </div>
-          </>
-        )}
-
-        {/* ==== DASHBOARD PRODUTOS ==== */}
-        {activeDashboard === 'produtos' && produtosData && (
-          <>
-            <h2 style={{
-              fontSize: '28px',
-              fontWeight: '900',
-              background: colors.gradients.gold,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              marginBottom: '16px',
-              textAlign: 'center'
-            }}>
-              🎰 Dashboard de Produtos
-            </h2>
-            <p style={{
-              textAlign: 'center',
-              color: colors.text.secondary,
-              fontSize: '14px',
-              marginBottom: '48px',
-              fontWeight: '600'
-            }}>
-              {produtosData.count} períodos analisados
-            </p>
-
-            {/* ==== SEÇÃO CASSINO ==== */}
-            <h3 style={{
-              fontSize: '24px',
-              fontWeight: '800',
-              background: colors.gradients.lime,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              marginBottom: '24px',
-              textAlign: 'left'
-            }}>
-              🎰 Cassino
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '48px' }}>
-              <StatCard
-                title="💸 Turnover"
-                value={`R$ ${produtosData.cassino.turnover.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="🎲"
-                gradient={colors.gradients.blueGreen}
-              />
-              <StatCard
-                title="💰 Lucro Bruto (GGR)"
-                value={`R$ ${produtosData.cassino.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="📊"
-                gradient={colors.gradients.gold}
-              />
-              <StatCard
-                title="💎 Lucro Líquido (NGR)"
-                value={`R$ ${produtosData.cassino.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="💚"
-                gradient={colors.gradients.lime}
-              />
-            </div>
-
-            {/* ==== SEÇÃO SPORTSBOOK ==== */}
-            <h3 style={{
-              fontSize: '24px',
-              fontWeight: '800',
-              background: colors.gradients.purple,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              marginBottom: '24px',
-              textAlign: 'left'
-            }}>
-              ⚽ Sportsbook
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '48px' }}>
-              <StatCard
-                title="💸 Turnover"
-                value={`R$ ${produtosData.sportsbook.turnover.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="⚽"
-                gradient={colors.gradients.blueGreen}
-              />
-              <StatCard
-                title="💰 Lucro Bruto (GGR)"
-                value={`R$ ${produtosData.sportsbook.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="📊"
-                gradient={colors.gradients.gold}
-              />
-              <StatCard
-                title="💎 Lucro Líquido (NGR)"
-                value={`R$ ${produtosData.sportsbook.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="💜"
-                gradient={colors.gradients.purple}
-              />
-            </div>
-
-            {/* ==== SEÇÃO TOTAL GERAL ==== */}
-            <h3 style={{
-              fontSize: '24px',
-              fontWeight: '800',
-              background: colors.gradients.sunset,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              marginBottom: '24px',
-              textAlign: 'left'
-            }}>
-              📊 Total Geral
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
-              <StatCard
-                title="💸 Turnover Total"
-                value={`R$ ${produtosData.totalGeral.turnover.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="🌐"
-                gradient={colors.gradients.blueGreen}
-              />
-              <StatCard
-                title="💰 Lucro Bruto (GGR)"
-                value={`R$ ${produtosData.totalGeral.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="💵"
-                gradient={colors.gradients.gold}
-              />
-              <StatCard
-                title="💎 Lucro Líquido (NGR)"
-                value={`R$ ${produtosData.totalGeral.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                icon="✨"
-                gradient={colors.gradients.lime}
-              />
-            </div>
-
-            {/* ==== COMPARAÇÃO CASSINO VS SPORTSBOOK ==== */}
-            <h3 style={{
-              fontSize: '24px',
-              fontWeight: '800',
-              background: colors.gradients.gold,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              marginBottom: '24px',
-              textAlign: 'left'
-            }}>
-              📊 Comparação de Desempenho
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px', marginBottom: '40px' }}>
-              <GlassCard>
-                <h3 style={{
-                  color: colors.text.primary,
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  marginBottom: '24px',
-                  textAlign: 'center',
-                  background: colors.gradients.lime,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  🎰 Share Cassino
-                </h3>
-                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                  <div style={{
-                    fontSize: '48px',
-                    fontWeight: '900',
-                    background: colors.gradients.gold,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
-                  }}>
-                    {produtosData.cassino.percent.toFixed(1)}%
-                  </div>
-                  <div style={{ color: colors.text.secondary, fontSize: '14px', marginTop: '8px' }}>
-                    R$ {produtosData.cassino.ggr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <GaugeChart value={produtosData.cassino.percent} max={100} title="GGR Share" color={colors.gold} />
-              </GlassCard>
-
-              <GlassCard>
-                <h3 style={{
-                  color: colors.text.primary,
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  marginBottom: '24px',
-                  textAlign: 'center',
-                  background: colors.gradients.purple,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  ⚽ Share Sportsbook
-                </h3>
-                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                  <div style={{
-                    fontSize: '48px',
-                    fontWeight: '900',
-                    background: colors.gradients.purple,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
-                  }}>
-                    {produtosData.sportsbook.percent.toFixed(1)}%
-                  </div>
-                  <div style={{ color: colors.text.secondary, fontSize: '14px', marginTop: '8px' }}>
-                    R$ {produtosData.sportsbook.ggr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <GaugeChart value={produtosData.sportsbook.percent} max={100} title="GGR Share" color={colors.purple} />
               </GlassCard>
             </div>
           </>
