@@ -804,3 +804,4 @@ app.listen(PORT, () => {
   // Iniciar busca automática
   startAutoFetch();
 });
+# Triggering pipeline again to test new Docker Hub token
