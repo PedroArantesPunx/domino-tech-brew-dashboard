@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
-  PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Brush,
-  RadialBarChart, RadialBar, ComposedChart
+  RadialBarChart, RadialBar, ComposedChart, Scatter
 } from 'recharts';
 
 const App = () => {
@@ -17,6 +17,13 @@ const App = () => {
   const [periodFilter, setPeriodFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
   const [activeDashboard, setActiveDashboard] = useState('overview'); // overview, bonus, produtos
+
+  // ==== ESTADOS PARA CONTROLES AVANÇADOS DE GRÁFICOS ====
+  const [chartType, setChartType] = useState('line'); // line, bar, area, candle, scatter
+  const [timeAggregation, setTimeAggregation] = useState('original'); // original, minutes, hours, days, weeks, months, years
+  const [enabledMA, setEnabledMA] = useState({ sma: false, ema: false, wma: false, hma: false });
+  const [maPeriod, setMaPeriod] = useState(7);
+  const [showSecondaryAxis, setShowSecondaryAxis] = useState(false);
 
   // ==== PALETA INSPIRADA EM SEGURO.BET.BR ====
   const colors = {
@@ -67,6 +74,142 @@ const App = () => {
       blueGreen: 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)',
       sunset: 'linear-gradient(135deg, #ff4757 0%, #d9a00d 50%, #00ff88 100%)',
     }
+  };
+
+  // ==== FUNÇÃO DE FORMATAÇÃO DE VALORES MONETÁRIOS ====
+  const formatCurrency = (value, decimals = 2) => {
+    if (value === null || value === undefined || isNaN(value)) return 'R$ 0,00';
+    return value.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  };
+
+  // ==== FUNÇÕES DE MÉDIAS MÓVEIS ====
+  const calculateSMA = React.useCallback((data, period, key = 'GGR') => {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        result.push(null);
+      } else {
+        const sum = data.slice(i - period + 1, i + 1).reduce((acc, item) => acc + (item[key] || 0), 0);
+        result.push(sum / period);
+      }
+    }
+    return result;
+  }, []);
+
+  const calculateEMA = React.useCallback((data, period, key = 'GGR') => {
+    const result = [];
+    const multiplier = 2 / (period + 1);
+    let ema = null;
+
+    for (let i = 0; i < data.length; i++) {
+      const value = data[i][key] || 0;
+      if (ema === null) {
+        ema = value;
+      } else {
+        ema = (value - ema) * multiplier + ema;
+      }
+      result.push(i < period - 1 ? null : ema);
+    }
+    return result;
+  }, []);
+
+  const calculateWMA = React.useCallback((data, period, key = 'GGR') => {
+    const result = [];
+    const weightSum = (period * (period + 1)) / 2;
+
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        result.push(null);
+      } else {
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+          sum += (data[i - j][key] || 0) * (period - j);
+        }
+        result.push(sum / weightSum);
+      }
+    }
+    return result;
+  }, []);
+
+  const calculateHMA = React.useCallback((data, period, key = 'GGR') => {
+    const halfPeriod = Math.floor(period / 2);
+    const sqrtPeriod = Math.floor(Math.sqrt(period));
+
+    const wma1 = calculateWMA(data, halfPeriod, key);
+    const wma2 = calculateWMA(data, period, key);
+
+    const rawHMA = wma1.map((val1, idx) => {
+      if (val1 === null || wma2[idx] === null) return null;
+      return 2 * val1 - wma2[idx];
+    });
+
+    const hmaData = rawHMA.map((val, idx) => ({ [key]: val }));
+    const finalHMA = calculateWMA(hmaData, sqrtPeriod, key);
+
+    return finalHMA;
+  }, [calculateWMA]);
+
+  // ==== FUNÇÃO DE AGREGAÇÃO POR PERÍODO ====
+  const aggregateDataByPeriod = (data, aggregationType) => {
+    if (aggregationType === 'original' || !data || data.length === 0) return data;
+
+    const grouped = {};
+
+    data.forEach(item => {
+      const date = new Date(item.timestamp);
+      let key;
+
+      switch (aggregationType) {
+        case 'minutes':
+          key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
+          break;
+        case 'hours':
+          key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}`;
+          break;
+        case 'days':
+          key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+          break;
+        case 'weeks':
+          const weekNum = Math.floor(date.getDate() / 7);
+          key = `${date.getFullYear()}-${date.getMonth()}-W${weekNum}`;
+          break;
+        case 'months':
+          key = `${date.getFullYear()}-${date.getMonth()}`;
+          break;
+        case 'years':
+          key = `${date.getFullYear()}`;
+          break;
+        default:
+          key = item.timestamp;
+      }
+
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(item);
+    });
+
+    return Object.keys(grouped).map(key => {
+      const items = grouped[key];
+      const avg = (field) => items.reduce((sum, item) => sum + (item[field] || 0), 0) / items.length;
+
+      return {
+        ...items[0],
+        ggr: avg('ggr'),
+        ngr: avg('ngr'),
+        turnoverTotal: avg('turnoverTotal'),
+        depositos: avg('depositos'),
+        saques: avg('saques'),
+        cassinoGGR: avg('cassinoGGR'),
+        cassinoNGR: avg('cassinoNGR'),
+        sportsbookGGR: avg('sportsbookGGR'),
+        sportsbookNGR: avg('sportsbookNGR'),
+        label: key
+      };
+    });
   };
 
   const loadData = React.useCallback(async () => {
@@ -162,15 +305,34 @@ const App = () => {
 
   const chartData = useMemo(() => {
     if (!filteredData || filteredData.length === 0) return [];
-    return filteredData.map(item => ({
-      label: `${item.data} ${item.hora}`,
+
+    // Aplicar agregação por período
+    const aggregatedData = aggregateDataByPeriod(filteredData, timeAggregation);
+
+    const baseData = aggregatedData.map(item => ({
+      label: timeAggregation === 'original' ? `${item.data} ${item.hora}` : item.label,
       GGR: item.ggr || 0,
       NGR: item.ngr || 0,
       Turnover: item.turnoverTotal || 0,
       Depositos: item.depositos || 0,
       Saques: item.saques || 0
     }));
-  }, [filteredData]);
+
+    // Calcular médias móveis
+    const smaValues = enabledMA.sma ? calculateSMA(baseData, maPeriod, 'GGR') : [];
+    const emaValues = enabledMA.ema ? calculateEMA(baseData, maPeriod, 'GGR') : [];
+    const wmaValues = enabledMA.wma ? calculateWMA(baseData, maPeriod, 'GGR') : [];
+    const hmaValues = enabledMA.hma ? calculateHMA(baseData, maPeriod, 'GGR') : [];
+
+    // Adicionar médias móveis aos dados
+    return baseData.map((item, idx) => ({
+      ...item,
+      SMA: enabledMA.sma ? smaValues[idx] : null,
+      EMA: enabledMA.ema ? emaValues[idx] : null,
+      WMA: enabledMA.wma ? wmaValues[idx] : null,
+      HMA: enabledMA.hma ? hmaValues[idx] : null
+    }));
+  }, [filteredData, timeAggregation, enabledMA, maPeriod, calculateSMA, calculateEMA, calculateWMA, calculateHMA]);
 
   const produtosData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -943,6 +1105,254 @@ const App = () => {
           </div>
         </GlassCard>
 
+        {/* ==== CONTROLES AVANÇADOS DE GRÁFICOS ==== */}
+        <GlassCard hover={false} style={{ marginBottom: '32px' }}>
+          <h3 style={{
+            color: colors.text.primary,
+            fontSize: '18px',
+            fontWeight: '800',
+            marginBottom: '24px',
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            background: colors.gradients.purple,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text'
+          }}>
+            📊 Controles Avançados de Gráficos
+          </h3>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px', marginBottom: '24px' }}>
+            {/* Tipo de Gráfico */}
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: '700',
+                color: colors.text.secondary,
+                marginBottom: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '1.2px'
+              }}>
+                📈 Tipo de Visualização
+              </label>
+              <select
+                value={chartType}
+                onChange={(e) => setChartType(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 18px',
+                  border: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  background: darkMode ? 'rgba(26, 29, 53, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                  color: colors.text.primary,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  backdropFilter: 'blur(10px)',
+                  outline: 'none'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = colors.purple;
+                  e.currentTarget.style.boxShadow = `0 0 20px ${colors.purple}40`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <option value="line">📈 Linha</option>
+                <option value="area">📊 Área</option>
+                <option value="bar">📊 Barra</option>
+                <option value="scatter">⚡ Scatter</option>
+              </select>
+            </div>
+
+            {/* Agregação de Tempo */}
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: '700',
+                color: colors.text.secondary,
+                marginBottom: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '1.2px'
+              }}>
+                ⏱️ Agregação de Tempo
+              </label>
+              <select
+                value={timeAggregation}
+                onChange={(e) => setTimeAggregation(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 18px',
+                  border: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  background: darkMode ? 'rgba(26, 29, 53, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                  color: colors.text.primary,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  backdropFilter: 'blur(10px)',
+                  outline: 'none'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = colors.cyan;
+                  e.currentTarget.style.boxShadow = `0 0 20px ${colors.cyan}40`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <option value="original">⚡ Original</option>
+                <option value="minutes">⏱️ Minutos</option>
+                <option value="hours">🕐 Horas</option>
+                <option value="days">📅 Dias</option>
+                <option value="weeks">📆 Semanas</option>
+                <option value="months">📊 Meses</option>
+                <option value="years">📈 Anos</option>
+              </select>
+            </div>
+
+            {/* Período de Média Móvel */}
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: '700',
+                color: colors.text.secondary,
+                marginBottom: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '1.2px'
+              }}>
+                🔢 Período MA ({maPeriod})
+              </label>
+              <input
+                type="range"
+                min="3"
+                max="50"
+                value={maPeriod}
+                onChange={(e) => setMaPeriod(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  height: '8px',
+                  borderRadius: '8px',
+                  outline: 'none',
+                  background: `linear-gradient(to right, ${colors.gold} 0%, ${colors.gold} ${((maPeriod - 3) / 47) * 100}%, ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} ${((maPeriod - 3) / 47) * 100}%, ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} 100%)`,
+                  cursor: 'pointer',
+                  accentColor: colors.gold
+                }}
+              />
+              <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '8px', textAlign: 'center', fontWeight: '600' }}>
+                3 ←→ 50 períodos
+              </div>
+            </div>
+
+            {/* Toggle Eixo Secundário */}
+            <div style={{
+              background: darkMode
+                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)'
+                : 'linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+              padding: '20px',
+              borderRadius: '16px',
+              border: `2px solid ${darkMode ? 'rgba(168, 85, 247, 0.3)' : 'rgba(168, 85, 247, 0.2)'}`,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              backdropFilter: 'blur(10px)',
+              boxShadow: `0 0 30px ${colors.purple}20`,
+              cursor: 'pointer',
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => setShowSecondaryAxis(!showSecondaryAxis)}
+            >
+              <div style={{ fontSize: '11px', color: colors.text.tertiary, marginBottom: '6px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                Eixo Secundário
+              </div>
+              <div style={{
+                fontSize: '32px',
+                fontWeight: '900',
+                lineHeight: 1
+              }}>
+                {showSecondaryAxis ? '✅' : '⬜'}
+              </div>
+              <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '6px', fontWeight: '600' }}>
+                {showSecondaryAxis ? 'Ativado' : 'Desativado'}
+              </div>
+            </div>
+          </div>
+
+          {/* Médias Móveis */}
+          <div style={{
+            padding: '20px',
+            borderRadius: '16px',
+            border: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+            background: darkMode ? 'rgba(26, 29, 53, 0.4)' : 'rgba(255, 255, 255, 0.4)',
+            backdropFilter: 'blur(10px)'
+          }}>
+            <div style={{
+              fontSize: '14px',
+              fontWeight: '700',
+              color: colors.text.secondary,
+              marginBottom: '16px',
+              textTransform: 'uppercase',
+              letterSpacing: '1.2px'
+            }}>
+              📊 Médias Móveis
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+              {[
+                { key: 'sma', label: 'SMA (Simples)', color: colors.gold },
+                { key: 'ema', label: 'EMA (Exponencial)', color: colors.lime },
+                { key: 'wma', label: 'WMA (Ponderada)', color: colors.cyan },
+                { key: 'hma', label: 'HMA (Hull)', color: colors.purple }
+              ].map(ma => (
+                <div
+                  key={ma.key}
+                  onClick={() => setEnabledMA({ ...enabledMA, [ma.key]: !enabledMA[ma.key] })}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: `2px solid ${enabledMA[ma.key] ? ma.color : (darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)')}`,
+                    background: enabledMA[ma.key]
+                      ? `linear-gradient(135deg, ${ma.color}20 0%, ${ma.color}10 100%)`
+                      : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    textAlign: 'center',
+                    boxShadow: enabledMA[ma.key] ? `0 0 20px ${ma.color}40` : 'none',
+                    transform: enabledMA[ma.key] ? 'scale(1.05)' : 'scale(1)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = `0 0 20px ${ma.color}40`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = enabledMA[ma.key] ? 'scale(1.05)' : 'scale(1)';
+                    e.currentTarget.style.boxShadow = enabledMA[ma.key] ? `0 0 20px ${ma.color}40` : 'none';
+                  }}
+                >
+                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>
+                    {enabledMA[ma.key] ? '✅' : '⬜'}
+                  </div>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: enabledMA[ma.key] ? ma.color : colors.text.secondary
+                  }}>
+                    {ma.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </GlassCard>
+
         {/* ==== DASHBOARD OVERVIEW ==== */}
         {activeDashboard === 'overview' && (
           <>
@@ -951,7 +1361,7 @@ const App = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '40px' }}>
             <StatCard
               title="💰 GGR Médio"
-              value={`R$ ${metrics.avgGGR.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+              value={formatCurrency(metrics.avgGGR)}
               trend={metrics.ggrTrend}
               sparklineData={metrics.sparklineData}
               icon="📈"
@@ -967,7 +1377,7 @@ const App = () => {
             />
             <StatCard
               title="⚡ Volatilidade"
-              value={`±${metrics.volatility.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+              value={`±${formatCurrency(metrics.volatility).replace('R$ ', '')}`}
               icon="📉"
               gradient={colors.gradients.purple}
             />
@@ -985,7 +1395,7 @@ const App = () => {
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '24px', marginBottom: '32px' }}>
 
-              {/* Area Chart */}
+              {/* Advanced Chart with Dynamic Configuration */}
               <GlassCard hover={false} style={{ gridColumn: 'span 2' }}>
                 <h3 style={{
                   color: colors.text.primary,
@@ -1021,7 +1431,21 @@ const App = () => {
                       stroke={colors.text.tertiary}
                       style={{ fontSize: '11px', fontWeight: '600' }}
                     />
-                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px', fontWeight: '600' }} />
+                    <YAxis
+                      yAxisId="left"
+                      stroke={colors.text.tertiary}
+                      style={{ fontSize: '12px', fontWeight: '600' }}
+                      label={{ value: 'GGR / NGR', angle: -90, position: 'insideLeft', style: { fill: colors.text.secondary, fontWeight: '700' } }}
+                    />
+                    {showSecondaryAxis && (
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        stroke={colors.cyan}
+                        style={{ fontSize: '12px', fontWeight: '600' }}
+                        label={{ value: 'Turnover', angle: 90, position: 'insideRight', style: { fill: colors.cyan, fontWeight: '700' } }}
+                      />
+                    )}
                     <Tooltip
                       contentStyle={{
                         background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
@@ -1035,25 +1459,184 @@ const App = () => {
                       labelStyle={{ color: colors.text.primary, marginBottom: '8px', fontWeight: '700' }}
                     />
                     <Legend wrapperStyle={{ fontWeight: '600' }} />
-                    <Area
-                      type="monotone"
-                      dataKey="GGR"
+
+                    {/* GGR - Main Metric */}
+                    {chartType === 'line' && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="GGR"
+                        stroke={colors.gold}
+                        strokeWidth={4}
+                        name="GGR"
+                        dot={{ r: 4, fill: colors.gold, strokeWidth: 2, stroke: darkMode ? colors.dark.primary : '#fff' }}
+                        filter="drop-shadow(0 0 8px rgba(217, 160, 13, 0.6))"
+                      />
+                    )}
+                    {chartType === 'area' && (
+                      <Area
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="GGR"
+                        stroke={colors.gold}
+                        strokeWidth={4}
+                        fill="url(#colorGGRUltra)"
+                        name="GGR"
+                        filter="drop-shadow(0 0 8px rgba(217, 160, 13, 0.6))"
+                      />
+                    )}
+                    {chartType === 'bar' && (
+                      <Bar
+                        yAxisId="left"
+                        dataKey="GGR"
+                        fill={colors.gold}
+                        name="GGR"
+                        radius={[8, 8, 0, 0]}
+                      />
+                    )}
+                    {chartType === 'scatter' && (
+                      <Scatter
+                        yAxisId="left"
+                        dataKey="GGR"
+                        fill={colors.gold}
+                        name="GGR"
+                        shape="circle"
+                      />
+                    )}
+
+                    {/* NGR - Secondary Metric */}
+                    {chartType === 'line' && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="NGR"
+                        stroke={colors.lime}
+                        strokeWidth={4}
+                        name="NGR"
+                        dot={{ r: 4, fill: colors.lime, strokeWidth: 2, stroke: darkMode ? colors.dark.primary : '#fff' }}
+                        filter="drop-shadow(0 0 8px rgba(13, 255, 153, 0.8))"
+                      />
+                    )}
+                    {chartType === 'area' && (
+                      <Area
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="NGR"
+                        stroke={colors.lime}
+                        strokeWidth={3}
+                        fill="url(#colorNGRUltra)"
+                        name="NGR"
+                        filter="drop-shadow(0 0 8px rgba(13, 255, 153, 0.8))"
+                      />
+                    )}
+                    {chartType === 'bar' && (
+                      <Bar
+                        yAxisId="left"
+                        dataKey="NGR"
+                        fill={colors.lime}
+                        name="NGR"
+                        radius={[8, 8, 0, 0]}
+                      />
+                    )}
+                    {chartType === 'scatter' && (
+                      <Scatter
+                        yAxisId="left"
+                        dataKey="NGR"
+                        fill={colors.lime}
+                        name="NGR"
+                        shape="diamond"
+                      />
+                    )}
+
+                    {/* Turnover on Secondary Axis */}
+                    {showSecondaryAxis && chartType === 'line' && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="Turnover"
+                        stroke={colors.cyan}
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        name="Turnover"
+                        dot={{ r: 3, fill: colors.cyan }}
+                        filter="drop-shadow(0 0 6px rgba(0, 245, 255, 0.5))"
+                      />
+                    )}
+                    {showSecondaryAxis && chartType === 'area' && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="Turnover"
+                        stroke={colors.cyan}
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        name="Turnover"
+                        filter="drop-shadow(0 0 6px rgba(0, 245, 255, 0.5))"
+                      />
+                    )}
+
+                    {/* Moving Averages */}
+                    {enabledMA.sma && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="SMA"
+                        stroke={colors.gold}
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        name={`SMA(${maPeriod})`}
+                        dot={false}
+                        opacity={0.7}
+                      />
+                    )}
+                    {enabledMA.ema && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="EMA"
+                        stroke={colors.lime}
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        name={`EMA(${maPeriod})`}
+                        dot={false}
+                        opacity={0.7}
+                      />
+                    )}
+                    {enabledMA.wma && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="WMA"
+                        stroke={colors.cyan}
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        name={`WMA(${maPeriod})`}
+                        dot={false}
+                        opacity={0.7}
+                      />
+                    )}
+                    {enabledMA.hma && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="HMA"
+                        stroke={colors.purple}
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        name={`HMA(${maPeriod})`}
+                        dot={false}
+                        opacity={0.7}
+                      />
+                    )}
+
+                    {/* Zoom & Pan with Brush */}
+                    {chartData.length > 10 && <Brush
+                      dataKey="label"
+                      height={40}
                       stroke={colors.gold}
-                      strokeWidth={4}
-                      fill="url(#colorGGRUltra)"
-                      name="GGR"
-                      filter="drop-shadow(0 0 8px rgba(217, 160, 13, 0.6))"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="NGR"
-                      stroke={colors.lime}
-                      strokeWidth={4}
-                      name="NGR"
-                      dot={{ r: 5, fill: colors.lime, strokeWidth: 2, stroke: darkMode ? colors.dark.primary : '#fff' }}
-                      filter="drop-shadow(0 0 8px rgba(13, 255, 153, 0.8))"
-                    />
-                    {chartData.length > 20 && <Brush dataKey="label" height={40} stroke={colors.gold} fill={darkMode ? 'rgba(26, 29, 53, 0.6)' : 'rgba(255, 255, 255, 0.6)'} />}
+                      fill={darkMode ? 'rgba(26, 29, 53, 0.6)' : 'rgba(255, 255, 255, 0.6)'}
+                      travellerWidth={10}
+                    />}
                   </ComposedChart>
                 </ResponsiveContainer>
               </GlassCard>
@@ -1137,7 +1720,7 @@ const App = () => {
                         {produtosData.cassino.percent.toFixed(1)}%
                       </div>
                       <div style={{ fontSize: '13px', color: colors.text.tertiary, marginTop: '4px', fontWeight: '600' }}>
-                        R$ {produtosData.cassino.ggr.toLocaleString('pt-BR')}
+                        {formatCurrency(produtosData.cassino.ggr)}
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -1146,7 +1729,7 @@ const App = () => {
                         {produtosData.sportsbook.percent.toFixed(1)}%
                       </div>
                       <div style={{ fontSize: '13px', color: colors.text.tertiary, marginTop: '4px', fontWeight: '600' }}>
-                        R$ {produtosData.sportsbook.ggr.toLocaleString('pt-BR')}
+                        {formatCurrency(produtosData.sportsbook.ggr)}
                       </div>
                     </div>
                   </div>
@@ -1253,13 +1836,13 @@ const App = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
               <StatCard
                 title="🎁 Total Concedido"
-                value={`R$ ${bonusData.totalConcedidos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
+                value={formatCurrency(bonusData.totalConcedidos)}
                 icon="💰"
                 gradient={colors.gradients.gold}
               />
               <StatCard
                 title="✅ Total Convertido"
-                value={`R$ ${bonusData.totalConvertidos.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
+                value={formatCurrency(bonusData.totalConvertidos)}
                 icon="💸"
                 gradient={colors.gradients.lime}
               />
@@ -1272,7 +1855,7 @@ const App = () => {
               />
               <StatCard
                 title="💲 Custo Total"
-                value={`R$ ${bonusData.totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
+                value={formatCurrency(bonusData.totalCusto)}
                 icon="💳"
                 gradient={colors.gradients.blueGreen}
               />
@@ -1403,19 +1986,19 @@ const App = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '48px' }}>
               <StatCard
                 title="💸 Turnover"
-                value={`R$ ${produtosData.cassino.turnover.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.cassino.turnover)}
                 icon="🎲"
                 gradient={colors.gradients.blueGreen}
               />
               <StatCard
                 title="💰 Lucro Bruto (GGR)"
-                value={`R$ ${produtosData.cassino.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.cassino.ggr)}
                 icon="📊"
                 gradient={colors.gradients.gold}
               />
               <StatCard
                 title="💎 Lucro Líquido (NGR)"
-                value={`R$ ${produtosData.cassino.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.cassino.ngr)}
                 icon="💚"
                 gradient={colors.gradients.lime}
               />
@@ -1437,19 +2020,19 @@ const App = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '48px' }}>
               <StatCard
                 title="💸 Turnover"
-                value={`R$ ${produtosData.sportsbook.turnover.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.sportsbook.turnover)}
                 icon="⚽"
                 gradient={colors.gradients.blueGreen}
               />
               <StatCard
                 title="💰 Lucro Bruto (GGR)"
-                value={`R$ ${produtosData.sportsbook.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.sportsbook.ggr)}
                 icon="📊"
                 gradient={colors.gradients.gold}
               />
               <StatCard
                 title="💎 Lucro Líquido (NGR)"
-                value={`R$ ${produtosData.sportsbook.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.sportsbook.ngr)}
                 icon="💜"
                 gradient={colors.gradients.purple}
               />
@@ -1471,19 +2054,19 @@ const App = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
               <StatCard
                 title="💸 Turnover Total"
-                value={`R$ ${produtosData.totalGeral.turnover.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.totalGeral.turnover)}
                 icon="🌐"
                 gradient={colors.gradients.blueGreen}
               />
               <StatCard
                 title="💰 Lucro Bruto (GGR)"
-                value={`R$ ${produtosData.totalGeral.ggr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.totalGeral.ggr)}
                 icon="💵"
                 gradient={colors.gradients.gold}
               />
               <StatCard
                 title="💎 Lucro Líquido (NGR)"
-                value={`R$ ${produtosData.totalGeral.ngr.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                value={formatCurrency(produtosData.totalGeral.ngr)}
                 icon="✨"
                 gradient={colors.gradients.lime}
               />
@@ -1529,7 +2112,7 @@ const App = () => {
                     {produtosData.cassino.percent.toFixed(1)}%
                   </div>
                   <div style={{ color: colors.text.secondary, fontSize: '14px', marginTop: '8px' }}>
-                    R$ {produtosData.cassino.ggr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatCurrency(produtosData.cassino.ggr)}
                   </div>
                 </div>
                 <GaugeChart value={produtosData.cassino.percent} max={100} title="GGR Share" color={colors.gold} />
@@ -1561,7 +2144,7 @@ const App = () => {
                     {produtosData.sportsbook.percent.toFixed(1)}%
                   </div>
                   <div style={{ color: colors.text.secondary, fontSize: '14px', marginTop: '8px' }}>
-                    R$ {produtosData.sportsbook.ggr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatCurrency(produtosData.sportsbook.ggr)}
                   </div>
                 </div>
                 <GaugeChart value={produtosData.sportsbook.percent} max={100} title="GGR Share" color={colors.purple} />

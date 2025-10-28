@@ -574,42 +574,52 @@ function calculateIncrementalValues(allData) {
 
       if (index === 0) {
         // Primeiro registro do dia - usar valores como estão (são o inicial)
-        processed.ggrIncremental = current.ggr || 0;
-        processed.ngrIncremental = current.ngr || 0;
-        processed.depositosIncremental = current.depositos || 0;
-        processed.saquesIncremental = current.saques || 0;
-        processed.turnoverIncremental = current.turnoverTotal || 0;
-
-        // Manter valores originais acumulados também
-        processed.ggrAcumulado = current.ggr || 0;
-        processed.ngrAcumulado = current.ngr || 0;
-        processed.depositosAcumulado = current.depositos || 0;
-        processed.saquesAcumulado = current.saques || 0;
+        // Só definir incremental se o campo existir no dado original
+        if (current.ggr !== undefined && current.ggr !== null) {
+          processed.ggrIncremental = current.ggr;
+          processed.ggrAcumulado = current.ggr;
+        }
+        if (current.ngr !== undefined && current.ngr !== null) {
+          processed.ngrIncremental = current.ngr;
+          processed.ngrAcumulado = current.ngr;
+        }
+        if (current.depositos !== undefined && current.depositos !== null) {
+          processed.depositosIncremental = current.depositos;
+          processed.depositosAcumulado = current.depositos;
+        }
+        if (current.saques !== undefined && current.saques !== null) {
+          processed.saquesIncremental = current.saques;
+          processed.saquesAcumulado = current.saques;
+        }
+        if (current.turnoverTotal !== undefined && current.turnoverTotal !== null) {
+          processed.turnoverIncremental = current.turnoverTotal;
+        }
 
         previousValues = current;
       } else {
-        // Registros subsequentes - calcular diferença
-        processed.ggrIncremental = (current.ggr || 0) - (previousValues.ggr || 0);
-        processed.ngrIncremental = (current.ngr || 0) - (previousValues.ngr || 0);
-        processed.depositosIncremental = (current.depositos || 0) - (previousValues.depositos || 0);
-        processed.saquesIncremental = (current.saques || 0) - (previousValues.saques || 0);
-        processed.turnoverIncremental = (current.turnoverTotal || 0) - (previousValues.turnoverTotal || 0);
-
-        // Manter valores acumulados
-        processed.ggrAcumulado = current.ggr || 0;
-        processed.ngrAcumulado = current.ngr || 0;
-        processed.depositosAcumulado = current.depositos || 0;
-        processed.saquesAcumulado = current.saques || 0;
+        // Registros subsequentes - calcular diferença apenas se o campo existir em ambos
+        if (current.ggr !== undefined && current.ggr !== null && previousValues.ggr !== undefined && previousValues.ggr !== null) {
+          processed.ggrIncremental = Math.max(0, current.ggr - previousValues.ggr);
+          processed.ggrAcumulado = current.ggr;
+        }
+        if (current.ngr !== undefined && current.ngr !== null && previousValues.ngr !== undefined && previousValues.ngr !== null) {
+          processed.ngrIncremental = Math.max(0, current.ngr - previousValues.ngr);
+          processed.ngrAcumulado = current.ngr;
+        }
+        if (current.depositos !== undefined && current.depositos !== null && previousValues.depositos !== undefined && previousValues.depositos !== null) {
+          processed.depositosIncremental = Math.max(0, current.depositos - previousValues.depositos);
+          processed.depositosAcumulado = current.depositos;
+        }
+        if (current.saques !== undefined && current.saques !== null && previousValues.saques !== undefined && previousValues.saques !== null) {
+          processed.saquesIncremental = Math.max(0, current.saques - previousValues.saques);
+          processed.saquesAcumulado = current.saques;
+        }
+        if (current.turnoverTotal !== undefined && current.turnoverTotal !== null && previousValues.turnoverTotal !== undefined && previousValues.turnoverTotal !== null) {
+          processed.turnoverIncremental = Math.max(0, current.turnoverTotal - previousValues.turnoverTotal);
+        }
 
         previousValues = current;
       }
-
-      // Garantir que não temos valores negativos (pode acontecer se houver ajustes/correções)
-      processed.ggrIncremental = Math.max(0, processed.ggrIncremental);
-      processed.ngrIncremental = Math.max(0, processed.ngrIncremental);
-      processed.depositosIncremental = Math.max(0, processed.depositosIncremental);
-      processed.saquesIncremental = Math.max(0, processed.saquesIncremental);
-      processed.turnoverIncremental = Math.max(0, processed.turnoverIncremental);
 
       result.push(processed);
     });
@@ -656,25 +666,47 @@ function aggregateDataByHour(allData) {
   });
 
   // Calcular médias dos valores incrementais
-  return Object.values(aggregated).map(item => ({
-    timestamp: item.timestamp,
-    hora: item.hora,
-    data: item.data,
-    tipoRelatorio: item.tipoRelatorio,
-    count: item.count,
+  return Object.values(aggregated).map(item => {
+    // Calcular média dos incrementais, ou usar acumulado se não houver incrementais
+    const avgGgr = item.valores.ggr.length > 0
+      ? item.valores.ggr.reduce((a, b) => a + b) / item.valores.ggr.length
+      : (item.ggrAcumulado || null);
 
-    // Valores incrementais (diferença do período)
-    ggr: item.valores.ggr.length > 0 ? item.valores.ggr.reduce((a, b) => a + b) / item.valores.ggr.length : null,
-    ngr: item.valores.ngr.length > 0 ? item.valores.ngr.reduce((a, b) => a + b) / item.valores.ngr.length : null,
-    turnoverTotal: item.valores.turnoverTotal.length > 0 ? item.valores.turnoverTotal.reduce((a, b) => a + b) / item.valores.turnoverTotal.length : null,
-    depositos: item.valores.depositos.length > 0 ? item.valores.depositos.reduce((a, b) => a + b) / item.valores.depositos.length : null,
-    saques: item.valores.saques.length > 0 ? item.valores.saques.reduce((a, b) => a + b) / item.valores.saques.length : null,
+    const avgNgr = item.valores.ngr.length > 0
+      ? item.valores.ngr.reduce((a, b) => a + b) / item.valores.ngr.length
+      : (item.ngrAcumulado || null);
 
-    // Valores acumulados (para referência)
-    ggrAcumulado: item.ggrAcumulado,
-    ngrAcumulado: item.ngrAcumulado,
-    depositosAcumulado: item.depositosAcumulado,
-    saquesAcumulado: item.saquesAcumulado,
+    const avgTurnover = item.valores.turnoverTotal.length > 0
+      ? item.valores.turnoverTotal.reduce((a, b) => a + b) / item.valores.turnoverTotal.length
+      : null;
+
+    const avgDepositos = item.valores.depositos.length > 0
+      ? item.valores.depositos.reduce((a, b) => a + b) / item.valores.depositos.length
+      : (item.depositosAcumulado || null);
+
+    const avgSaques = item.valores.saques.length > 0
+      ? item.valores.saques.reduce((a, b) => a + b) / item.valores.saques.length
+      : (item.saquesAcumulado || null);
+
+    return {
+      timestamp: item.timestamp,
+      hora: item.hora,
+      data: item.data,
+      tipoRelatorio: item.tipoRelatorio,
+      count: item.count,
+
+      // Valores incrementais (diferença do período) ou acumulados se não houver incrementais
+      ggr: avgGgr,
+      ngr: avgNgr,
+      turnoverTotal: avgTurnover,
+      depositos: avgDepositos,
+      saques: avgSaques,
+
+      // Valores acumulados (para referência)
+      ggrAcumulado: item.ggrAcumulado,
+      ngrAcumulado: item.ngrAcumulado,
+      depositosAcumulado: item.depositosAcumulado,
+      saquesAcumulado: item.saquesAcumulado,
 
     // Outros campos (não são acumulados)
     cassinoGGR: item.cassinoGGR,
@@ -693,12 +725,13 @@ function aggregateDataByHour(allData) {
     saqueMedio: item.saqueMedio,
     ticketMedio: item.ticketMedio,
     ggrMedioJogador: item.ggrMedioJogador,
-    bonusConcedidos: item.bonusConcedidos,
-    bonusConvertidos: item.bonusConvertidos,
-    taxaConversaoBonus: item.taxaConversaoBonus,
-    apostasComBonus: item.apostasComBonus,
-    custoBonus: item.custoBonus
-  }));
+      bonusConcedidos: item.bonusConcedidos,
+      bonusConvertidos: item.bonusConvertidos,
+      taxaConversaoBonus: item.taxaConversaoBonus,
+      apostasComBonus: item.apostasComBonus,
+      custoBonus: item.custoBonus
+    };
+  });
 }
 
 /**
@@ -804,4 +837,4 @@ app.listen(PORT, () => {
   // Iniciar busca automática
   startAutoFetch();
 });
-# Triggering pipeline again to test new Docker Hub token
+// Triggering pipeline again to test new Docker Hub token

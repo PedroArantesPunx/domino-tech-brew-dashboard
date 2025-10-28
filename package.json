@@ -4,6 +4,7 @@
   "private": true,
   "description": "Dashboard de Alertas Slack - Domino Tech & Brew",
   "homepage": "https://seudominio.com.br",
+  "proxy": "http://localhost:3001",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
