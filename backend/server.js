@@ -276,13 +276,225 @@ function parseSlackMessage(text, slackTimestamp = null) {
   }
 }
 
+// ==================== FUNÇÕES DE VALIDAÇÃO E DETECÇÃO DE ANOMALIAS ====================
+
 /**
- * Salvar dados no arquivo JSON
+ * Verifica se o dado é uma duplicata exata do último registro do mesmo tipo
+ */
+function isDuplicate(newData, existingData) {
+  if (!existingData || existingData.length === 0) return false;
+
+  // Buscar o último registro do mesmo tipo de relatório
+  const sameTypeRecords = existingData.filter(item => item.tipoRelatorio === newData.tipoRelatorio);
+  if (sameTypeRecords.length === 0) return false;
+
+  const lastRecord = sameTypeRecords[sameTypeRecords.length - 1];
+
+  // Campos críticos para comparação (excluindo timestamp e hora)
+  const criticalFields = ['ggr', 'ngr', 'turnoverTotal', 'depositos', 'saques',
+                          'cassinoGGR', 'cassinoTurnover', 'sportsbookGGR', 'sportsbookTurnover',
+                          'jogadoresUnicos', 'apostadores', 'depositantes'];
+
+  // Verificar se todos os campos críticos são idênticos
+  const allFieldsMatch = criticalFields.every(field => {
+    const newValue = newData[field];
+    const oldValue = lastRecord[field];
+
+    // Ambos null/undefined ou valores iguais
+    if (newValue === oldValue) return true;
+    if (newValue == null && oldValue == null) return true;
+    if (newValue == null || oldValue == null) return false;
+
+    // Comparar números com tolerância de 0.001 para evitar problemas de precisão
+    return Math.abs(newValue - oldValue) < 0.001;
+  });
+
+  if (allFieldsMatch) {
+    console.warn(`⚠️  DUPLICATA DETECTADA: ${newData.tipoRelatorio} - ${newData.data} ${newData.hora}`);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Calcula valores incrementais (delta) em relação ao registro anterior
+ */
+function calculateDeltas(newData, existingData) {
+  if (!existingData || existingData.length === 0) return newData;
+
+  // Buscar o último registro do mesmo tipo de relatório e mesma data
+  const sameTypeRecords = existingData.filter(item =>
+    item.tipoRelatorio === newData.tipoRelatorio &&
+    item.data === newData.data
+  );
+
+  if (sameTypeRecords.length === 0) {
+    // Primeiro registro do dia - valores incrementais = valores totais
+    newData.deltas = {
+      ggr: newData.ggr || 0,
+      ngr: newData.ngr || 0,
+      turnoverTotal: newData.turnoverTotal || 0,
+      depositos: newData.depositos || 0,
+      saques: newData.saques || 0,
+      isFirstOfDay: true
+    };
+    return newData;
+  }
+
+  const previousRecord = sameTypeRecords[sameTypeRecords.length - 1];
+
+  // Calcular deltas (diferença em relação ao anterior)
+  newData.deltas = {
+    ggr: (newData.ggr || 0) - (previousRecord.ggr || 0),
+    ngr: (newData.ngr || 0) - (previousRecord.ngr || 0),
+    turnoverTotal: (newData.turnoverTotal || 0) - (previousRecord.turnoverTotal || 0),
+    depositos: (newData.depositos || 0) - (previousRecord.depositos || 0),
+    saques: (newData.saques || 0) - (previousRecord.saques || 0),
+    isFirstOfDay: false,
+    previousTimestamp: previousRecord.timestamp
+  };
+
+  return newData;
+}
+
+/**
+ * Detecta anomalias financeiras baseadas em padrões suspeitos
+ * Análise Sênior de Risco Financeiro para iGaming Brasil
+ */
+function detectAnomalies(newData, existingData) {
+  const anomalies = [];
+
+  // 1. VERIFICAÇÃO DE VALORES NEGATIVOS SUSPEITOS
+  if (newData.ggr < 0 && Math.abs(newData.ggr) > 10000) {
+    anomalies.push({
+      type: 'NEGATIVE_GGR_HIGH',
+      severity: 'CRITICAL',
+      message: `GGR negativo muito alto: R$ ${newData.ggr.toFixed(2)}`,
+      field: 'ggr',
+      value: newData.ggr
+    });
+  }
+
+  // 2. DETECÇÃO DE SPIKE ANORMAL (>500% vs média histórica)
+  if (existingData && existingData.length > 10) {
+    const sameTypeRecords = existingData.filter(item => item.tipoRelatorio === newData.tipoRelatorio);
+
+    if (sameTypeRecords.length >= 10) {
+      const recentRecords = sameTypeRecords.slice(-10);
+      const avgGGR = recentRecords.reduce((sum, r) => sum + (r.ggr || 0), 0) / 10;
+
+      if (avgGGR > 0 && newData.ggr > avgGGR * 5) {
+        anomalies.push({
+          type: 'SPIKE_DETECTION',
+          severity: 'HIGH',
+          message: `Spike de GGR detectado: ${((newData.ggr / avgGGR - 1) * 100).toFixed(0)}% acima da média`,
+          field: 'ggr',
+          value: newData.ggr,
+          baseline: avgGGR
+        });
+      }
+    }
+  }
+
+  // 3. PADRÃO SUSPEITO: DEPOSITOS MUITO MAIORES QUE SAQUES (possível lavagem)
+  if (newData.depositos && newData.saques) {
+    const depositoSaqueRatio = newData.depositos / (newData.saques || 1);
+
+    if (depositoSaqueRatio > 10 && newData.depositos > 50000) {
+      anomalies.push({
+        type: 'DEPOSIT_WITHDRAWAL_IMBALANCE',
+        severity: 'MEDIUM',
+        message: `Depósitos muito maiores que saques: ratio ${depositoSaqueRatio.toFixed(1)}:1`,
+        field: 'depositos_saques',
+        depositoSaqueRatio: depositoSaqueRatio
+      });
+    }
+  }
+
+  // 4. FLUXO LÍQUIDO NEGATIVO MUITO ALTO (risco de fraude)
+  if (newData.fluxoLiquido && newData.fluxoLiquido < -100000) {
+    anomalies.push({
+      type: 'HIGH_NEGATIVE_CASH_FLOW',
+      severity: 'HIGH',
+      message: `Fluxo líquido muito negativo: R$ ${newData.fluxoLiquido.toFixed(2)}`,
+      field: 'fluxoLiquido',
+      value: newData.fluxoLiquido
+    });
+  }
+
+  // 5. TAXA DE CONVERSÃO DE BÔNUS SUSPEITA
+  if (newData.taxaConversaoBonus && newData.taxaConversaoBonus > 80) {
+    anomalies.push({
+      type: 'HIGH_BONUS_CONVERSION',
+      severity: 'MEDIUM',
+      message: `Taxa de conversão de bônus muito alta: ${newData.taxaConversaoBonus}%`,
+      field: 'taxaConversaoBonus',
+      value: newData.taxaConversaoBonus
+    });
+  }
+
+  // 6. VERIFICAÇÃO DE CONSISTÊNCIA: NGR > GGR (impossível)
+  if (newData.ngr && newData.ggr && newData.ngr > newData.ggr) {
+    anomalies.push({
+      type: 'DATA_INCONSISTENCY',
+      severity: 'CRITICAL',
+      message: `NGR maior que GGR (inconsistência): NGR=${newData.ngr}, GGR=${newData.ggr}`,
+      field: 'ngr_ggr',
+      ngr: newData.ngr,
+      ggr: newData.ggr
+    });
+  }
+
+  // Adicionar anomalias ao objeto
+  if (anomalies.length > 0) {
+    newData.anomalies = anomalies;
+    console.warn(`🚨 ANOMALIAS DETECTADAS (${anomalies.length}):`, anomalies.map(a => a.message).join(' | '));
+  }
+
+  return newData;
+}
+
+/**
+ * Valida integridade dos dados antes de salvar
+ */
+function validateDataIntegrity(data) {
+  const validationErrors = [];
+
+  // Verificar campos obrigatórios
+  if (!data.timestamp) validationErrors.push('Timestamp ausente');
+  if (!data.tipoRelatorio) validationErrors.push('Tipo de relatório ausente');
+  if (!data.data) validationErrors.push('Data ausente');
+  if (!data.hora) validationErrors.push('Hora ausente');
+
+  // Verificar tipos de dados
+  const numericFields = ['ggr', 'ngr', 'turnoverTotal', 'depositos', 'saques'];
+  numericFields.forEach(field => {
+    if (data[field] !== null && data[field] !== undefined && typeof data[field] !== 'number') {
+      validationErrors.push(`Campo ${field} não é numérico`);
+    }
+  });
+
+  // Verificar intervalos válidos
+  if (data.taxaConversaoBonus && (data.taxaConversaoBonus < 0 || data.taxaConversaoBonus > 100)) {
+    validationErrors.push('Taxa de conversão fora do intervalo válido (0-100%)');
+  }
+
+  if (validationErrors.length > 0) {
+    console.error('❌ ERROS DE VALIDAÇÃO:', validationErrors);
+    return { valid: false, errors: validationErrors };
+  }
+
+  return { valid: true, errors: [] };
+}
+
+/**
+ * Salvar dados no arquivo JSON com validação e detecção de duplicatas
  */
 async function saveData(newData) {
   try {
     let allData = [];
-    
+
     // Tentar ler dados existentes
     try {
       const fileContent = await fs.readFile(DATA_FILE, 'utf8');
@@ -291,6 +503,33 @@ async function saveData(newData) {
       // Arquivo não existe ainda, criar novo
       console.log('Criando novo arquivo de dados...');
     }
+
+    // VALIDAÇÃO DE INTEGRIDADE
+    const validation = validateDataIntegrity(newData);
+    if (!validation.valid) {
+      console.error('❌ Dados inválidos, não serão salvos:', validation.errors);
+      return false;
+    }
+
+    // DETECÇÃO DE DUPLICATAS
+    if (isDuplicate(newData, allData)) {
+      console.warn('⚠️  Duplicata detectada - ignorando registro para evitar poluição de dados');
+      return false;
+    }
+
+    // CÁLCULO DE DELTAS
+    newData = calculateDeltas(newData, allData);
+
+    // DETECÇÃO DE ANOMALIAS
+    newData = detectAnomalies(newData, allData);
+
+    // Adicionar metadados de processamento
+    newData.metadata = {
+      processedAt: new Date().toISOString(),
+      dataQuality: validation.valid ? 'VALID' : 'INVALID',
+      hasAnomalies: (newData.anomalies && newData.anomalies.length > 0),
+      anomalyCount: newData.anomalies ? newData.anomalies.length : 0
+    };
 
     // Adicionar novos dados
     allData.push(newData);
@@ -782,6 +1021,289 @@ app.get('/api/dashboard-data', async (req, res) => {
   }
 });
 
+/**
+ * Endpoint para visualizar anomalias detectadas
+ * Análise de Risco Financeiro - Detecção de Fraudes
+ */
+app.get('/api/anomalies', async (req, res) => {
+  try {
+    let allData = [];
+
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      return res.json({
+        success: true,
+        anomalies: [],
+        totalAnomalies: 0,
+        message: 'Nenhum dado disponível ainda'
+      });
+    }
+
+    // Filtrar apenas registros com anomalias
+    const recordsWithAnomalies = allData.filter(item =>
+      item.anomalies && item.anomalies.length > 0
+    );
+
+    // Agrupar por severidade
+    const bySeverity = {
+      CRITICAL: [],
+      HIGH: [],
+      MEDIUM: [],
+      LOW: []
+    };
+
+    recordsWithAnomalies.forEach(record => {
+      record.anomalies.forEach(anomaly => {
+        const anomalyWithContext = {
+          ...anomaly,
+          timestamp: record.timestamp,
+          data: record.data,
+          hora: record.hora,
+          tipoRelatorio: record.tipoRelatorio
+        };
+
+        if (bySeverity[anomaly.severity]) {
+          bySeverity[anomaly.severity].push(anomalyWithContext);
+        }
+      });
+    });
+
+    // Estatísticas
+    const totalAnomalies = recordsWithAnomalies.reduce((sum, r) => sum + r.anomalies.length, 0);
+
+    res.json({
+      success: true,
+      totalRecordsWithAnomalies: recordsWithAnomalies.length,
+      totalAnomalies: totalAnomalies,
+      bySeverity: {
+        CRITICAL: bySeverity.CRITICAL.length,
+        HIGH: bySeverity.HIGH.length,
+        MEDIUM: bySeverity.MEDIUM.length,
+        LOW: bySeverity.LOW.length
+      },
+      anomalies: bySeverity,
+      recentAnomalies: recordsWithAnomalies.slice(-10).reverse() // Últimas 10
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint para métricas de qualidade e integridade de dados
+ */
+app.get('/api/data-quality', async (req, res) => {
+  try {
+    let allData = [];
+
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      return res.json({
+        success: true,
+        quality: 'NO_DATA',
+        message: 'Nenhum dado disponível ainda'
+      });
+    }
+
+    // Estatísticas gerais
+    const totalRecords = allData.length;
+    const recordsWithAnomalies = allData.filter(r => r.anomalies && r.anomalies.length > 0).length;
+    const recordsWithDeltas = allData.filter(r => r.deltas).length;
+
+    // Agrupar por tipo de relatório
+    const byType = {
+      'Performance de Produtos': allData.filter(r => r.tipoRelatorio === 'Performance de Produtos'),
+      'Time de Risco': allData.filter(r => r.tipoRelatorio === 'Time de Risco')
+    };
+
+    // Calcular intervalo médio entre atualizações (por tipo)
+    const avgIntervals = {};
+
+    Object.keys(byType).forEach(tipo => {
+      const records = byType[tipo].sort((a, b) =>
+        new Date(a.timestamp) - new Date(b.timestamp)
+      );
+
+      if (records.length > 1) {
+        const intervals = [];
+        for (let i = 1; i < records.length; i++) {
+          const diff = (new Date(records[i].timestamp) - new Date(records[i-1].timestamp)) / 1000 / 60; // minutos
+          intervals.push(diff);
+        }
+        avgIntervals[tipo] = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      }
+    });
+
+    // Completeness: % de campos preenchidos
+    const checkCompleteness = (records, fields) => {
+      if (records.length === 0) return 0;
+
+      let totalFields = 0;
+      let filledFields = 0;
+
+      records.forEach(record => {
+        fields.forEach(field => {
+          totalFields++;
+          if (record[field] !== null && record[field] !== undefined) {
+            filledFields++;
+          }
+        });
+      });
+
+      return (filledFields / totalFields) * 100;
+    };
+
+    const performanceCompleteness = checkCompleteness(
+      byType['Performance de Produtos'],
+      ['ggr', 'ngr', 'turnoverTotal', 'cassinoGGR', 'sportsbookGGR']
+    );
+
+    const riscoCompleteness = checkCompleteness(
+      byType['Time de Risco'],
+      ['depositos', 'saques', 'jogadoresUnicos', 'apostadores', 'depositantes']
+    );
+
+    // Calcular score geral de qualidade (0-100)
+    const anomalyPenalty = (recordsWithAnomalies / totalRecords) * 20; // Máx 20 pontos de penalidade
+    const completenessScore = (performanceCompleteness + riscoCompleteness) / 2 * 0.4; // 40 pontos
+    const deltaScore = (recordsWithDeltas / totalRecords) * 40; // 40 pontos
+
+    const qualityScore = Math.max(0, 100 - anomalyPenalty + completenessScore + deltaScore - 40);
+
+    let qualityGrade;
+    if (qualityScore >= 90) qualityGrade = 'EXCELENTE';
+    else if (qualityScore >= 75) qualityGrade = 'BOM';
+    else if (qualityScore >= 60) qualityGrade = 'REGULAR';
+    else qualityGrade = 'CRÍTICO';
+
+    res.json({
+      success: true,
+      qualityScore: Math.round(qualityScore),
+      qualityGrade: qualityGrade,
+      metrics: {
+        totalRecords: totalRecords,
+        recordsWithAnomalies: recordsWithAnomalies,
+        anomalyRate: ((recordsWithAnomalies / totalRecords) * 100).toFixed(2) + '%',
+        recordsWithDeltas: recordsWithDeltas,
+        deltaCalculationRate: ((recordsWithDeltas / totalRecords) * 100).toFixed(2) + '%',
+
+        byType: {
+          'Performance de Produtos': {
+            count: byType['Performance de Produtos'].length,
+            avgInterval: avgIntervals['Performance de Produtos'] ?
+              `${Math.round(avgIntervals['Performance de Produtos'])} minutos` : 'N/A',
+            completeness: `${performanceCompleteness.toFixed(1)}%`,
+            expectedInterval: '15 minutos'
+          },
+          'Time de Risco': {
+            count: byType['Time de Risco'].length,
+            avgInterval: avgIntervals['Time de Risco'] ?
+              `${Math.round(avgIntervals['Time de Risco'])} minutos` : 'N/A',
+            completeness: `${riscoCompleteness.toFixed(1)}%`,
+            expectedInterval: '60 minutos'
+          }
+        }
+      },
+      lastUpdate: allData.length > 0 ? allData[allData.length - 1].timestamp : null
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint para visualizar valores incrementais (deltas)
+ * Útil para análise temporal de mudanças
+ */
+app.get('/api/deltas', async (req, res) => {
+  try {
+    let allData = [];
+
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      return res.json({
+        success: true,
+        deltas: [],
+        message: 'Nenhum dado disponível ainda'
+      });
+    }
+
+    // Filtrar apenas registros com deltas calculados
+    const recordsWithDeltas = allData
+      .filter(item => item.deltas)
+      .map(item => ({
+        timestamp: item.timestamp,
+        data: item.data,
+        hora: item.hora,
+        tipoRelatorio: item.tipoRelatorio,
+        deltas: item.deltas,
+        // Incluir valores totais para comparação
+        totais: {
+          ggr: item.ggr,
+          ngr: item.ngr,
+          turnoverTotal: item.turnoverTotal,
+          depositos: item.depositos,
+          saques: item.saques
+        }
+      }))
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Mais recentes primeiro
+
+    // Estatísticas dos deltas
+    const stats = {
+      avgGGRDelta: 0,
+      avgNGRDelta: 0,
+      maxGGRDelta: { value: 0, timestamp: null },
+      minGGRDelta: { value: 0, timestamp: null }
+    };
+
+    if (recordsWithDeltas.length > 0) {
+      const ggrDeltas = recordsWithDeltas
+        .filter(r => !r.deltas.isFirstOfDay)
+        .map(r => r.deltas.ggr);
+
+      if (ggrDeltas.length > 0) {
+        stats.avgGGRDelta = ggrDeltas.reduce((a, b) => a + b, 0) / ggrDeltas.length;
+        stats.maxGGRDelta.value = Math.max(...ggrDeltas);
+        stats.minGGRDelta.value = Math.min(...ggrDeltas);
+
+        const maxRecord = recordsWithDeltas.find(r => r.deltas.ggr === stats.maxGGRDelta.value);
+        const minRecord = recordsWithDeltas.find(r => r.deltas.ggr === stats.minGGRDelta.value);
+
+        stats.maxGGRDelta.timestamp = maxRecord?.timestamp;
+        stats.minGGRDelta.timestamp = minRecord?.timestamp;
+      }
+    }
+
+    res.json({
+      success: true,
+      totalRecordsWithDeltas: recordsWithDeltas.length,
+      stats: stats,
+      deltas: recordsWithDeltas.slice(0, 50), // Retornar últimos 50
+      message: `${recordsWithDeltas.length} registros com deltas calculados`
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ==================== INICIALIZAÇÃO ====================
 
 /**
@@ -809,20 +1331,24 @@ app.listen(PORT, () => {
 
 📋 Endpoints disponíveis:
 
-1. GET  /api/list-channels
-   → Lista todos os canais para você descobrir o CHANNEL_ID
+DADOS:
+1. GET  /api/dashboard-data     → Dados processados para o dashboard
+2. GET  /api/data               → Todos os dados brutos armazenados
+3. GET  /api/deltas             → Valores incrementais (deltas)
 
-2. GET  /api/fetch-messages
-   → Busca manualmente novas mensagens do Slack
+QUALIDADE & RISCO:
+4. GET  /api/data-quality       → Métricas de qualidade dos dados
+5. GET  /api/anomalies          → Anomalias financeiras detectadas
 
-3. GET  /api/data
-   → Retorna todos os dados armazenados
+SLACK:
+6. GET  /api/list-channels      → Lista canais do Slack
+7. GET  /api/fetch-messages     → Busca mensagens do Slack
+8. GET  /api/debug-messages     → Debug de mensagens
 
-4. DELETE /api/data
-   → Limpa todos os dados (útil para testes)
-
-5. POST /api/test-parser
-   → Testa o parser com uma mensagem de exemplo
+OUTROS:
+9. GET  /api/health             → Status do servidor
+10. POST /api/test-parser       → Testa parser de mensagens
+11. DELETE /api/data            → Limpa todos os dados
 
 ⚙️  Próximos passos:
 1. Configure SLACK_BOT_TOKEN no código
