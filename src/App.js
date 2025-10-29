@@ -500,10 +500,12 @@ const App = () => {
   }, [filteredData, timeAggregation, enabledMA, maPeriod, calculateSMA, calculateEMA, calculateWMA, calculateHMA]);
 
   const produtosData = useMemo(() => {
-    if (!data || data.length === 0) return null;
+    // Usar performanceData.data ao invés de data (sistema antigo)
+    const perfDataSource = performanceData?.data || [];
+    if (perfDataSource.length === 0) return null;
 
     // Filtrar apenas dados de Performance de Produtos
-    let perfData = data.filter(item =>
+    let perfData = perfDataSource.filter(item =>
       item.tipoRelatorio === 'Performance de Produtos' &&
       item.cassinoGGR &&
       item.sportsbookGGR
@@ -577,7 +579,7 @@ const App = () => {
       },
       count: perfData.length
     };
-  }, [data, periodFilter]);
+  }, [performanceData, periodFilter]);
 
   const bonusData = useMemo(() => {
     if (!data || data.length === 0) return null;
