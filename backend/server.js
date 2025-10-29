@@ -888,8 +888,9 @@ function enrichPerformanceData(data) {
     // Converter timestamp para UTC-3
     const localTimestamp = convertToUTCMinus3(item.timestamp);
     const localDate = new Date(localTimestamp);
-    const localHora = `${String(localDate.getHours()).padStart(2, '0')}:${String(localDate.getMinutes()).padStart(2, '0')}`;
-    const localData = `${String(localDate.getDate()).padStart(2, '0')}/${String(localDate.getMonth() + 1).padStart(2, '0')}`;
+    // Usar getUTC* porque o timestamp já foi ajustado para UTC-3
+    const localHora = `${String(localDate.getUTCHours()).padStart(2, '0')}:${String(localDate.getUTCMinutes()).padStart(2, '0')}`;
+    const localData = `${String(localDate.getUTCDate()).padStart(2, '0')}/${String(localDate.getUTCMonth() + 1).padStart(2, '0')}`;
 
     const enriched = {
       ...item,
