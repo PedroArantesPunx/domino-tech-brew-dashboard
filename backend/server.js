@@ -1005,8 +1005,10 @@ function aggregateDataByHour(allData) {
 
     // Outros campos (não são acumulados)
     cassinoGGR: item.cassinoGGR,
+    cassinoNGR: item.cassinoNGR,  // Adicionado: NGR calculado do Casino
     cassinoTurnover: item.cassinoTurnover,
     sportsbookGGR: item.sportsbookGGR,
+    sportsbookNGR: item.sportsbookNGR,  // Adicionado: NGR calculado do Sportsbook
     sportsbookTurnover: item.sportsbookTurnover,
     fluxoLiquido: item.fluxoLiquido,
     jogadoresUnicos: item.jogadoresUnicos,
