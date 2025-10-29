@@ -2205,6 +2205,412 @@ const App = () => {
           </>
         )}
 
+        {/* ==== DASHBOARD RISCO & QUALIDADE ==== */}
+        {activeDashboard === 'anomalias' && (
+          <>
+            <h2 style={{
+              fontSize: '28px',
+              fontWeight: '900',
+              background: colors.gradients.gold,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '32px',
+              textAlign: 'center'
+            }}>
+              🚨 Monitoramento de Risco & Qualidade de Dados
+            </h2>
+
+            {/* ==== ALERTAS CRITICAL EM TEMPO REAL ==== */}
+            {criticalAlerts.length > 0 && (
+              <GlassCard style={{
+                marginBottom: '32px',
+                border: `3px solid ${colors.danger}`,
+                background: darkMode
+                  ? 'rgba(255, 71, 87, 0.15)'
+                  : 'rgba(255, 71, 87, 0.08)',
+                animation: 'pulse 2s infinite'
+              }}>
+                <h3 style={{
+                  color: colors.danger,
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '32px', filter: `drop-shadow(0 0 10px ${colors.danger})` }}>🚨</span>
+                  Alertas Críticos Ativos ({criticalAlerts.length})
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {criticalAlerts.slice(0, 5).map((alert, idx) => (
+                    <div key={idx} style={{
+                      padding: '16px',
+                      background: darkMode ? 'rgba(255, 71, 87, 0.1)' : 'rgba(255, 71, 87, 0.05)',
+                      borderRadius: '12px',
+                      borderLeft: `4px solid ${colors.danger}`
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '8px'
+                      }}>
+                        <span style={{
+                          color: colors.text.primary,
+                          fontWeight: '700',
+                          fontSize: '15px'
+                        }}>
+                          {alert.message}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          color: colors.text.tertiary,
+                          background: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontWeight: '700'
+                        }}>
+                          {new Date(alert.timestamp).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <div style={{
+                        fontSize: '13px',
+                        color: colors.text.secondary,
+                        display: 'flex',
+                        gap: '16px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <span>📍 {alert.tipoRelatorio || 'N/A'}</span>
+                        <span>📅 {alert.data || 'N/A'}</span>
+                        <span>🕐 {alert.hora || 'N/A'}</span>
+                        {alert.ngr && <span>💰 NGR: {alert.ngr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                        {alert.ggr && <span>💎 GGR: {alert.ggr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* ==== MÉTRICAS DE QUALIDADE ==== */}
+            {dataQuality && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+                <StatCard
+                  title="Score de Qualidade"
+                  value={dataQuality.qualityScore || 0}
+                  subtitle={dataQuality.qualityGrade || 'N/A'}
+                  icon="⭐"
+                  gradient={
+                    dataQuality.qualityScore >= 90 ? colors.gradients.lime :
+                    dataQuality.qualityScore >= 75 ? colors.gradients.gold :
+                    dataQuality.qualityScore >= 50 ? 'linear-gradient(135deg, #FF9D00 0%, #FFB800 100%)' :
+                    'linear-gradient(135deg, #FF4757 0%, #FF6B7A 100%)'
+                  }
+                />
+                <StatCard
+                  title="Total de Registros"
+                  value={dataQuality.metrics?.totalRecords?.toLocaleString('pt-BR') || '0'}
+                  subtitle="Processados"
+                  icon="📊"
+                  gradient={colors.gradients.gold}
+                />
+                <StatCard
+                  title="Taxa de Anomalias"
+                  value={dataQuality.metrics?.anomalyRate || '0%'}
+                  subtitle={`${anomaliesData?.totalAnomalies || 0} detectadas`}
+                  icon="⚠️"
+                  gradient={colors.gradients.purple}
+                />
+                <StatCard
+                  title="Registros com Deltas"
+                  value={dataQuality.metrics?.deltaCalculationRate || '0%'}
+                  subtitle="Calculados"
+                  icon="📈"
+                  gradient={colors.gradients.lime}
+                />
+              </div>
+            )}
+
+            {/* ==== ANOMALIAS POR SEVERIDADE ==== */}
+            {anomaliesData && (
+              <>
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  background: colors.gradients.gold,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px',
+                  textAlign: 'left'
+                }}>
+                  📊 Distribuição de Anomalias por Severidade
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+                  <GlassCard style={{ borderLeft: `4px solid #FF4757` }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '12px' }}>🔴</div>
+                      <div style={{
+                        fontSize: '42px',
+                        fontWeight: '900',
+                        color: '#FF4757',
+                        marginBottom: '8px'
+                      }}>
+                        {anomaliesData.bySeverity?.CRITICAL || 0}
+                      </div>
+                      <div style={{
+                        color: colors.text.secondary,
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px'
+                      }}>
+                        CRITICAL
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard style={{ borderLeft: `4px solid #FF6B00` }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '12px' }}>🟠</div>
+                      <div style={{
+                        fontSize: '42px',
+                        fontWeight: '900',
+                        color: '#FF6B00',
+                        marginBottom: '8px'
+                      }}>
+                        {anomaliesData.bySeverity?.HIGH || 0}
+                      </div>
+                      <div style={{
+                        color: colors.text.secondary,
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px'
+                      }}>
+                        HIGH
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard style={{ borderLeft: `4px solid #FFB800` }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '12px' }}>🟡</div>
+                      <div style={{
+                        fontSize: '42px',
+                        fontWeight: '900',
+                        color: '#FFB800',
+                        marginBottom: '8px'
+                      }}>
+                        {anomaliesData.bySeverity?.MEDIUM || 0}
+                      </div>
+                      <div style={{
+                        color: colors.text.secondary,
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px'
+                      }}>
+                        MEDIUM
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard style={{ borderLeft: `4px solid #0DFF99` }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '12px' }}>🟢</div>
+                      <div style={{
+                        fontSize: '42px',
+                        fontWeight: '900',
+                        color: '#0DFF99',
+                        marginBottom: '8px'
+                      }}>
+                        {anomaliesData.bySeverity?.LOW || 0}
+                      </div>
+                      <div style={{
+                        color: colors.text.secondary,
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px'
+                      }}>
+                        LOW
+                      </div>
+                    </div>
+                  </GlassCard>
+                </div>
+
+                {/* ==== DETALHAMENTO DE ANOMALIAS ==== */}
+                {Object.entries(anomaliesData.anomalies || {}).map(([severity, alerts]) => {
+                  if (!alerts || alerts.length === 0) return null;
+
+                  const severityColors = {
+                    CRITICAL: '#FF4757',
+                    HIGH: '#FF6B00',
+                    MEDIUM: '#FFB800',
+                    LOW: '#0DFF99'
+                  };
+
+                  const severityIcons = {
+                    CRITICAL: '🔴',
+                    HIGH: '🟠',
+                    MEDIUM: '🟡',
+                    LOW: '🟢'
+                  };
+
+                  return (
+                    <GlassCard key={severity} style={{ marginBottom: '24px' }}>
+                      <h4 style={{
+                        color: severityColors[severity],
+                        fontSize: '18px',
+                        fontWeight: '800',
+                        marginBottom: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                      }}>
+                        <span style={{ fontSize: '24px' }}>{severityIcons[severity]}</span>
+                        Anomalias {severity} ({alerts.length})
+                      </h4>
+                      <div style={{
+                        maxHeight: severity === 'CRITICAL' ? 'none' : '400px',
+                        overflowY: severity === 'CRITICAL' ? 'visible' : 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}>
+                        {alerts.slice(0, severity === 'CRITICAL' ? alerts.length : 10).map((anomaly, idx) => (
+                          <div key={idx} style={{
+                            padding: '14px',
+                            background: darkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
+                            borderRadius: '10px',
+                            borderLeft: `3px solid ${severityColors[severity]}`
+                          }}>
+                            <div style={{
+                              color: colors.text.primary,
+                              fontWeight: '600',
+                              fontSize: '14px',
+                              marginBottom: '8px'
+                            }}>
+                              {anomaly.message}
+                            </div>
+                            <div style={{
+                              fontSize: '12px',
+                              color: colors.text.tertiary,
+                              display: 'flex',
+                              gap: '12px',
+                              flexWrap: 'wrap'
+                            }}>
+                              <span>📍 {anomaly.tipoRelatorio || 'N/A'}</span>
+                              <span>📅 {anomaly.data || 'N/A'} {anomaly.hora || ''}</span>
+                              <span>⚙️ {anomaly.type || 'N/A'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {alerts.length > 10 && severity !== 'CRITICAL' && (
+                        <div style={{
+                          marginTop: '12px',
+                          textAlign: 'center',
+                          color: colors.text.tertiary,
+                          fontSize: '13px',
+                          fontWeight: '600'
+                        }}>
+                          + {alerts.length - 10} anomalias adicionais
+                        </div>
+                      )}
+                    </GlassCard>
+                  );
+                })}
+              </>
+            )}
+
+            {/* ==== INTEGRIDADE DE DADOS ==== */}
+            {dataQuality && dataQuality.metrics?.byType && (
+              <GlassCard>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  background: colors.gradients.lime,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px'
+                }}>
+                  🛡️ Integridade de Dados por Tipo de Relatório
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
+                  {Object.entries(dataQuality.metrics.byType).map(([tipo, metrics]) => (
+                    <div key={tipo} style={{
+                      padding: '20px',
+                      background: darkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
+                      borderRadius: '12px',
+                      border: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`
+                    }}>
+                      <h4 style={{
+                        color: colors.text.primary,
+                        fontSize: '16px',
+                        fontWeight: '800',
+                        marginBottom: '16px'
+                      }}>
+                        {tipo === 'Performance de Produtos' ? '🎰' : '⚠️'} {tipo}
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: colors.text.secondary, fontSize: '14px' }}>Total de Registros:</span>
+                          <span style={{ color: colors.text.primary, fontWeight: '700' }}>
+                            {metrics.count?.toLocaleString('pt-BR') || 0}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: colors.text.secondary, fontSize: '14px' }}>Completude:</span>
+                          <span style={{
+                            color: parseFloat(metrics.completeness) >= 95 ? colors.lime : parseFloat(metrics.completeness) >= 80 ? colors.gold : colors.danger,
+                            fontWeight: '700'
+                          }}>
+                            {metrics.completeness || 'N/A'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: colors.text.secondary, fontSize: '14px' }}>Intervalo Médio:</span>
+                          <span style={{ color: colors.text.primary, fontWeight: '700' }}>
+                            {metrics.avgInterval || 'N/A'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: colors.text.secondary, fontSize: '14px' }}>Intervalo Esperado:</span>
+                          <span style={{ color: colors.text.tertiary, fontWeight: '600' }}>
+                            {metrics.expectedInterval || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Mensagem quando não há dados */}
+            {!anomaliesData && !dataQuality && (
+              <div style={{ textAlign: 'center', padding: '100px 20px', color: colors.text.secondary }}>
+                <div style={{
+                  fontSize: '80px',
+                  marginBottom: '24px',
+                  filter: `drop-shadow(0 0 25px ${colors.gold})`
+                }}>🛡️</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', marginBottom: '12px', color: colors.text.primary }}>
+                  Carregando dados de qualidade...
+                </div>
+                <div style={{ fontSize: '16px', color: colors.text.tertiary }}>
+                  Aguarde enquanto processamos as informações
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {loading && (
           <div style={{ textAlign: 'center', padding: '100px 20px', color: colors.text.secondary }}>
             <div style={{
