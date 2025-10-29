@@ -16,7 +16,10 @@ const App = () => {
 
   const [periodFilter, setPeriodFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
-  const [activeDashboard, setActiveDashboard] = useState('overview'); // overview, bonus, produtos
+  const [activeDashboard, setActiveDashboard] = useState('overview'); // overview, bonus, produtos, anomalias
+  const [anomaliesData, setAnomaliesData] = useState(null);
+  const [dataQuality, setDataQuality] = useState(null);
+  const [criticalAlerts, setCriticalAlerts] = useState([]);
 
   // ==== ESTADOS PARA CONTROLES AVANÇADOS DE GRÁFICOS ====
   const [chartType, setChartType] = useState('line'); // line, bar, area, candle, scatter
@@ -228,13 +231,61 @@ const App = () => {
     }
   }, []);
 
+  // Buscar dados de anomalias
+  const loadAnomalies = React.useCallback(async () => {
+    try {
+      const response = await fetch('/api/anomalies');
+      if (!response.ok) return;
+      const result = await response.json();
+      setAnomaliesData(result);
+
+      // Verificar anomalias CRITICAL para alertas
+      if (result.anomalies && result.anomalies.CRITICAL && result.anomalies.CRITICAL.length > 0) {
+        const newCriticalAlerts = result.anomalies.CRITICAL.filter(anomaly => {
+          // Verificar se já não está nos alertas atuais
+          return !criticalAlerts.some(alert =>
+            alert.timestamp === anomaly.timestamp && alert.type === anomaly.type
+          );
+        });
+
+        if (newCriticalAlerts.length > 0) {
+          setCriticalAlerts(prev => [...newCriticalAlerts, ...prev].slice(0, 10)); // Manter últimos 10
+
+          // Exibir alerta visual no console
+          newCriticalAlerts.forEach(alert => {
+            console.error('🚨 ALERTA CRITICAL:', alert.message, alert);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao buscar anomalias:', err);
+    }
+  }, [criticalAlerts]);
+
+  // Buscar qualidade de dados
+  const loadDataQuality = React.useCallback(async () => {
+    try {
+      const response = await fetch('/api/data-quality');
+      if (!response.ok) return;
+      const result = await response.json();
+      setDataQuality(result);
+    } catch (err) {
+      console.error('Erro ao buscar qualidade de dados:', err);
+    }
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadAnomalies(); loadDataQuality(); }, [loadAnomalies, loadDataQuality]);
   useEffect(() => {
     if (autoRefresh) {
-      const interval = setInterval(loadData, 30000);
+      const interval = setInterval(() => {
+        loadData();
+        loadAnomalies();
+        loadDataQuality();
+      }, 30000);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, loadData]);
+  }, [autoRefresh, loadData, loadAnomalies, loadDataQuality]);
 
   const filteredData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -902,7 +953,8 @@ const App = () => {
           {[
             { id: 'overview', label: '📊 Overview', icon: '📊' },
             { id: 'bonus', label: '🎁 Bônus', icon: '🎁' },
-            { id: 'produtos', label: '🎰 Produtos', icon: '🎰' }
+            { id: 'produtos', label: '🎰 Produtos', icon: '🎰' },
+            { id: 'anomalias', label: '🚨 Risco & Qualidade', icon: '🛡️' }
           ].map(tab => (
             <button
               key={tab.id}

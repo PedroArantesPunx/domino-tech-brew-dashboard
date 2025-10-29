@@ -1304,6 +1304,94 @@ app.get('/api/deltas', async (req, res) => {
   }
 });
 
+/**
+ * Endpoint para gerar relatórios periódicos de qualidade de dados
+ * Retorna um sumário completo para análise gerencial
+ */
+app.get('/api/quality-report', async (req, res) => {
+  try {
+    // Buscar todos os dados
+    const [qualityData, anomaliesData, deltasData] = await Promise.all([
+      fetch('http://localhost:3001/api/data-quality').then(r => r.json()),
+      fetch('http://localhost:3001/api/anomalies').then(r => r.json()),
+      fetch('http://localhost:3001/api/deltas').then(r => r.json())
+    ].map(p => p.catch(e => ({ error: e.message }))));
+
+    const report = {
+      generatedAt: new Date().toISOString(),
+      reportDate: new Date().toLocaleDateString('pt-BR'),
+      reportTime: new Date().toLocaleTimeString('pt-BR'),
+
+      summary: {
+        overallQuality: qualityData.qualityGrade || 'N/A',
+        qualityScore: qualityData.qualityScore || 0,
+        totalRecords: qualityData.metrics?.totalRecords || 0,
+        anomalyRate: qualityData.metrics?.anomalyRate || '0%',
+        deltaCalculationRate: qualityData.metrics?.deltaCalculationRate || '0%'
+      },
+
+      anomalies: {
+        total: anomaliesData.totalAnomalies || 0,
+        totalRecordsWithAnomalies: anomaliesData.totalRecordsWithAnomalies || 0,
+        bySeverity: anomaliesData.bySeverity || {
+          CRITICAL: 0,
+          HIGH: 0,
+          MEDIUM: 0,
+          LOW: 0
+        },
+        criticalIssues: anomaliesData.anomalies?.CRITICAL?.slice(0, 5) || []
+      },
+
+      deltas: {
+        totalWithDeltas: deltasData.totalRecordsWithDeltas || 0,
+        avgGGRDelta: deltasData.stats?.avgGGRDelta || 0,
+        maxGGRDelta: deltasData.stats?.maxGGRDelta || { value: 0 },
+        minGGRDelta: deltasData.stats?.minGGRDelta || { value: 0 }
+      },
+
+      dataIntegrity: {
+        performanceReports: qualityData.metrics?.byType?.['Performance de Produtos'] || {},
+        riscoReports: qualityData.metrics?.byType?.['Time de Risco'] || {}
+      },
+
+      recommendations: []
+    };
+
+    // Adicionar recomendações baseadas na análise
+    if (report.summary.qualityScore < 75) {
+      report.recommendations.push({
+        priority: 'HIGH',
+        message: 'Score de qualidade abaixo do ideal. Revisar processos de coleta de dados.'
+      });
+    }
+
+    if (report.anomalies.bySeverity.CRITICAL > 0) {
+      report.recommendations.push({
+        priority: 'CRITICAL',
+        message: `${report.anomalies.bySeverity.CRITICAL} anomalias críticas detectadas. Ação imediata necessária.`
+      });
+    }
+
+    if (report.anomalies.bySeverity.HIGH > 10) {
+      report.recommendations.push({
+        priority: 'HIGH',
+        message: `${report.anomalies.bySeverity.HIGH} anomalias de alta severidade. Investigação recomendada.`
+      });
+    }
+
+    res.json({
+      success: true,
+      report: report
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ==================== INICIALIZAÇÃO ====================
 
 /**
