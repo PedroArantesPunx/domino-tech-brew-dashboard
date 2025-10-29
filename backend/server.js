@@ -868,6 +868,62 @@ function calculateIncrementalValues(allData) {
 }
 
 /**
+ * Função para converter timestamp UTC para UTC-3 (horário de Brasília)
+ */
+function convertToUTCMinus3(utcTimestamp) {
+  const date = new Date(utcTimestamp);
+  // Subtrair 3 horas (180 minutos)
+  date.setMinutes(date.getMinutes() - 180);
+  return date.toISOString();
+}
+
+/**
+ * Função para enriquecer dados de Performance de Produtos
+ * Calcula cassinoNGR e sportsbookNGR proporcionalmente ao GGR
+ */
+function enrichPerformanceData(data) {
+  console.log(`[ENRICH] Processando ${data.length} registros...`);
+
+  return data.map((item, idx) => {
+    // Converter timestamp para UTC-3
+    const localTimestamp = convertToUTCMinus3(item.timestamp);
+    const localDate = new Date(localTimestamp);
+    const localHora = `${String(localDate.getHours()).padStart(2, '0')}:${String(localDate.getMinutes()).padStart(2, '0')}`;
+    const localData = `${String(localDate.getDate()).padStart(2, '0')}/${String(localDate.getMonth() + 1).padStart(2, '0')}`;
+
+    const enriched = {
+      ...item,
+      timestamp: localTimestamp,
+      hora: localHora,
+      data: localData
+    };
+
+    // Se for Performance de Produtos, calcular NGRs separados
+    if (item.tipoRelatorio === 'Performance de Produtos' && item.ngr && item.cassinoGGR && item.sportsbookGGR) {
+      const totalGGR = item.cassinoGGR + item.sportsbookGGR;
+
+      if (totalGGR > 0) {
+        // Calcular NGR proporcional ao GGR
+        enriched.cassinoNGR = (item.ngr * item.cassinoGGR) / totalGGR;
+        enriched.sportsbookNGR = (item.ngr * item.sportsbookGGR) / totalGGR;
+
+        if (idx === 0) {
+          console.log('[ENRICH] Calculando NGRs:');
+          console.log(`  NGR Total: ${item.ngr}`);
+          console.log(`  Casino NGR: ${enriched.cassinoNGR}`);
+          console.log(`  Sportsbook NGR: ${enriched.sportsbookNGR}`);
+        }
+      } else {
+        enriched.cassinoNGR = 0;
+        enriched.sportsbookNGR = 0;
+      }
+    }
+
+    return enriched;
+  });
+}
+
+/**
  * Função para agregar dados por hora para análise
  * Evita duplicidade e melhora a visualização
  * ATUALIZADO: Agora usa valores incrementais ao invés de acumulados
@@ -990,8 +1046,11 @@ app.get('/api/dashboard-data', async (req, res) => {
       console.log('Nenhum dado armazenado ainda');
     }
 
+    // Enriquecer dados (converter timezone e calcular NGRs separados)
+    const enrichedData = enrichPerformanceData(allData);
+
     // Agregar dados por hora para melhor análise
-    const aggregatedData = aggregateDataByHour(allData);
+    const aggregatedData = aggregateDataByHour(enrichedData);
 
     // Calcular estatísticas usando timezone de Brasília
     const now = new Date();
@@ -1038,8 +1097,11 @@ app.get('/api/dashboard-performance', async (req, res) => {
       console.log('Nenhum dado armazenado ainda');
     }
 
+    // Enriquecer dados (converter timezone e calcular NGRs separados)
+    const enrichedData = enrichPerformanceData(allData);
+
     // Filtrar APENAS Performance de Produtos
-    const performanceData = allData.filter(item =>
+    const performanceData = enrichedData.filter(item =>
       item.tipoRelatorio === 'Performance de Produtos'
     );
 
@@ -1088,6 +1150,31 @@ app.get('/api/dashboard-performance', async (req, res) => {
       }
     };
 
+    // Calcular diferença entre último e penúltimo registro
+    let diff = null;
+    if (aggregatedData.length >= 2) {
+      const ultimo = aggregatedData[0];
+      const penultimo = aggregatedData[1];
+
+      diff = {
+        casino: {
+          ggr: (ultimo.cassinoGGR || 0) - (penultimo.cassinoGGR || 0),
+          ngr: (ultimo.cassinoNGR || 0) - (penultimo.cassinoNGR || 0),
+          turnover: (ultimo.cassinoTurnover || 0) - (penultimo.cassinoTurnover || 0)
+        },
+        sportsbook: {
+          ggr: (ultimo.sportsbookGGR || 0) - (penultimo.sportsbookGGR || 0),
+          ngr: (ultimo.sportsbookNGR || 0) - (penultimo.sportsbookNGR || 0),
+          turnover: (ultimo.sportsbookTurnover || 0) - (penultimo.sportsbookTurnover || 0)
+        },
+        total: {
+          ggr: (ultimo.ggr || 0) - (penultimo.ggr || 0),
+          ngr: (ultimo.ngr || 0) - (penultimo.ngr || 0),
+          turnover: (ultimo.turnoverTotal || 0) - (penultimo.turnoverTotal || 0)
+        }
+      };
+    }
+
     const stats = {
       totalRegistros: aggregatedData.length,
       registrosHoje: todayData.length,
@@ -1095,7 +1182,8 @@ app.get('/api/dashboard-performance', async (req, res) => {
       ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       periodicidade: '15 minutos',
       totals: totals,
-      shares: shares
+      shares: shares,
+      diff: diff
     };
 
     res.json({
@@ -1132,8 +1220,11 @@ app.get('/api/dashboard-risco', async (req, res) => {
       console.log('Nenhum dado armazenado ainda');
     }
 
+    // Enriquecer dados (converter timezone)
+    const enrichedData = enrichPerformanceData(allData);
+
     // Filtrar APENAS Time de Risco
-    const riscoData = allData.filter(item =>
+    const riscoData = enrichedData.filter(item =>
       item.tipoRelatorio === 'Time de Risco'
     );
 
@@ -1237,9 +1328,12 @@ app.get('/api/dashboard-overview', async (req, res) => {
       console.log('Nenhum dado armazenado ainda');
     }
 
+    // Enriquecer dados (converter timezone e calcular NGRs)
+    const enrichedData = enrichPerformanceData(allData);
+
     // Separar por tipo
-    const performanceData = allData.filter(item => item.tipoRelatorio === 'Performance de Produtos');
-    const riscoData = allData.filter(item => item.tipoRelatorio === 'Time de Risco');
+    const performanceData = enrichedData.filter(item => item.tipoRelatorio === 'Performance de Produtos');
+    const riscoData = enrichedData.filter(item => item.tipoRelatorio === 'Time de Risco');
 
     // Agregar cada tipo separadamente
     const aggregatedPerformance = aggregateDataByHour(performanceData);
