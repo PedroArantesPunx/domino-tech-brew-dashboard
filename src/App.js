@@ -16,10 +16,23 @@ const App = () => {
 
   const [periodFilter, setPeriodFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
-  const [activeDashboard, setActiveDashboard] = useState('overview'); // overview, bonus, produtos, anomalias
+  const [activeDashboard, setActiveDashboard] = useState('performance'); // performance, risco, overview, anomalias
   const [anomaliesData, setAnomaliesData] = useState(null);
   const [dataQuality, setDataQuality] = useState(null);
   const [criticalAlerts, setCriticalAlerts] = useState([]);
+
+  // ==== ESTADOS PARA DASHBOARDS SEPARADOS ====
+  const [performanceData, setPerformanceData] = useState(null);
+  const [riscoData, setRiscoData] = useState(null);
+  const [overviewData, setOverviewData] = useState(null);
+
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [riscoLoading, setRiscoLoading] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  const [performanceError, setPerformanceError] = useState(null);
+  const [riscoError, setRiscoError] = useState(null);
+  const [overviewError, setOverviewError] = useState(null);
 
   // ==== ESTADOS PARA CONTROLES AVANÇADOS DE GRÁFICOS ====
   const [chartType, setChartType] = useState('line'); // line, bar, area, candle, scatter
@@ -289,18 +302,104 @@ const App = () => {
     }
   }, []);
 
+  // ==== FUNÇÕES DE FETCH PARA DASHBOARDS SEPARADOS ====
+
+  // Buscar dados de Performance de Produtos
+  const loadPerformanceData = React.useCallback(async () => {
+    setPerformanceLoading(true);
+    setPerformanceError(null);
+    try {
+      const response = await fetch('/api/dashboard-performance');
+      if (!response.ok) throw new Error('Erro ao buscar dados de Performance');
+      const result = await response.json();
+      setPerformanceData(result);
+
+      // Atualizar lastUpdate se houver dados
+      if (result.data && result.data.length > 0) {
+        const latestRecord = result.data[0];
+        setLastUpdate({
+          timestamp: latestRecord.timestamp,
+          formatted: `${latestRecord.data} às ${latestRecord.hora}`,
+          tipo: 'Performance de Produtos',
+          fetchedAt: new Date().toLocaleString('pt-BR')
+        });
+      }
+    } catch (err) {
+      setPerformanceError(err.message);
+      console.error('Erro ao buscar Performance:', err);
+    } finally {
+      setPerformanceLoading(false);
+    }
+  }, []);
+
+  // Buscar dados de Time de Risco
+  const loadRiscoData = React.useCallback(async () => {
+    setRiscoLoading(true);
+    setRiscoError(null);
+    try {
+      const response = await fetch('/api/dashboard-risco');
+      if (!response.ok) throw new Error('Erro ao buscar dados de Risco');
+      const result = await response.json();
+      setRiscoData(result);
+
+      // Atualizar lastUpdate se houver dados
+      if (result.data && result.data.length > 0) {
+        const latestRecord = result.data[0];
+        setLastUpdate({
+          timestamp: latestRecord.timestamp,
+          formatted: `${latestRecord.data} às ${latestRecord.hora}`,
+          tipo: 'Time de Risco',
+          fetchedAt: new Date().toLocaleString('pt-BR')
+        });
+      }
+    } catch (err) {
+      setRiscoError(err.message);
+      console.error('Erro ao buscar Risco:', err);
+    } finally {
+      setRiscoLoading(false);
+    }
+  }, []);
+
+  // Buscar dados de Overview (Geral)
+  const loadOverviewData = React.useCallback(async () => {
+    setOverviewLoading(true);
+    setOverviewError(null);
+    try {
+      const response = await fetch('/api/dashboard-overview');
+      if (!response.ok) throw new Error('Erro ao buscar dados de Overview');
+      const result = await response.json();
+      setOverviewData(result);
+    } catch (err) {
+      setOverviewError(err.message);
+      console.error('Erro ao buscar Overview:', err);
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { loadAnomalies(); loadDataQuality(); }, [loadAnomalies, loadDataQuality]);
+
+  // Carregar dados dos dashboards separados na inicialização
+  useEffect(() => {
+    loadPerformanceData();
+    loadRiscoData();
+    loadOverviewData();
+  }, [loadPerformanceData, loadRiscoData, loadOverviewData]);
+
   useEffect(() => {
     if (autoRefresh) {
       const interval = setInterval(() => {
         loadData();
         loadAnomalies();
         loadDataQuality();
+        loadPerformanceData();
+        loadRiscoData();
+        loadOverviewData();
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, loadData, loadAnomalies, loadDataQuality]);
+  }, [autoRefresh, loadData, loadAnomalies, loadDataQuality, loadPerformanceData, loadRiscoData, loadOverviewData]);
 
   const filteredData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -1159,10 +1258,10 @@ const App = () => {
           paddingBottom: '0'
         }}>
           {[
-            { id: 'overview', label: '📊 Overview', icon: '📊' },
-            { id: 'bonus', label: '🎁 Bônus', icon: '🎁' },
-            { id: 'produtos', label: '🎰 Produtos', icon: '🎰' },
-            { id: 'anomalias', label: '🚨 Risco & Qualidade', icon: '🛡️' }
+            { id: 'performance', label: '🎰 Performance', icon: '🎰' },
+            { id: 'risco', label: '⚠️ Time de Risco', icon: '⚠️' },
+            { id: 'overview', label: '📈 Overview Geral', icon: '📈' },
+            { id: 'anomalias', label: '🚨 Anomalias', icon: '🛡️' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -2056,8 +2155,8 @@ const App = () => {
           </>
         )}
 
-        {/* ==== DASHBOARD BÔNUS ==== */}
-        {activeDashboard === 'bonus' && bonusData && (
+        {/* ==== DASHBOARD TIME DE RISCO ==== */}
+        {activeDashboard === 'risco' && bonusData && (
           <>
             <h2 style={{
               fontSize: '28px',
@@ -2069,7 +2168,7 @@ const App = () => {
               marginBottom: '16px',
               textAlign: 'center'
             }}>
-              🎁 Dashboard de Bônus
+              ⚠️ Dashboard Time de Risco
             </h2>
             <p style={{
               textAlign: 'center',
@@ -2078,10 +2177,22 @@ const App = () => {
               marginBottom: '32px',
               fontWeight: '600'
             }}>
-              {bonusData.count} períodos analisados
+              {bonusData.count} períodos analisados • Intervalo: 1 hora
             </p>
 
-            {/* KPI Cards Bônus */}
+            {/* Seção Bônus */}
+            <h3 style={{
+              fontSize: '22px',
+              fontWeight: '800',
+              background: colors.gradients.purple,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '24px',
+              textAlign: 'left'
+            }}>
+              🎁 Gestão de Bônus
+            </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
               <StatCard
                 title="🎁 Total Concedido"
@@ -2194,8 +2305,8 @@ const App = () => {
           </>
         )}
 
-        {/* ==== DASHBOARD PRODUTOS ==== */}
-        {activeDashboard === 'produtos' && produtosData && (
+        {/* ==== DASHBOARD PERFORMANCE ==== */}
+        {activeDashboard === 'performance' && produtosData && (
           <>
             <h2 style={{
               fontSize: '28px',
@@ -2207,7 +2318,7 @@ const App = () => {
               marginBottom: '16px',
               textAlign: 'center'
             }}>
-              🎰 Dashboard de Produtos
+              🎰 Dashboard Performance de Produtos
             </h2>
             <p style={{
               textAlign: 'center',
@@ -2216,7 +2327,7 @@ const App = () => {
               marginBottom: '48px',
               fontWeight: '600'
             }}>
-              {produtosData.count} períodos analisados
+              {produtosData.count} períodos analisados • Intervalo: 15 minutos
             </p>
 
             {/* ==== SEÇÃO CASSINO ==== */}
