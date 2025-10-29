@@ -1022,6 +1022,301 @@ app.get('/api/dashboard-data', async (req, res) => {
 });
 
 /**
+ * Endpoint exclusivo para Dashboard de Performance de Produtos
+ * Filtra apenas dados de "Performance de Produtos"
+ * Inclui breakdown: Casino vs Sportsbook
+ */
+app.get('/api/dashboard-performance', async (req, res) => {
+  try {
+    let allData = [];
+
+    // Ler dados existentes
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      console.log('Nenhum dado armazenado ainda');
+    }
+
+    // Filtrar APENAS Performance de Produtos
+    const performanceData = allData.filter(item =>
+      item.tipoRelatorio === 'Performance de Produtos'
+    );
+
+    // Agregar dados por hora
+    const aggregatedData = aggregateDataByHour(performanceData);
+
+    // Calcular estatísticas específicas de Performance
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const today = brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+    const todayData = aggregatedData.filter(item => item.data === today);
+
+    // Calcular totais de Casino vs Sportsbook
+    const totals = aggregatedData.reduce((acc, item) => {
+      acc.cassinoGGR += item.cassinoGGR || 0;
+      acc.sportsbookGGR += item.sportsbookGGR || 0;
+      acc.cassinoNGR += item.cassinoNGR || 0;
+      acc.sportsbookNGR += item.sportsbookNGR || 0;
+      acc.cassinoTurnover += item.cassinoTurnover || 0;
+      acc.sportsbookTurnover += item.sportsbookTurnover || 0;
+      return acc;
+    }, {
+      cassinoGGR: 0,
+      sportsbookGGR: 0,
+      cassinoNGR: 0,
+      sportsbookNGR: 0,
+      cassinoTurnover: 0,
+      sportsbookTurnover: 0
+    });
+
+    totals.totalGGR = totals.cassinoGGR + totals.sportsbookGGR;
+    totals.totalNGR = totals.cassinoNGR + totals.sportsbookNGR;
+    totals.totalTurnover = totals.cassinoTurnover + totals.sportsbookTurnover;
+
+    // Calcular shares percentuais
+    const shares = {
+      casino: {
+        ggrPercent: totals.totalGGR > 0 ? (totals.cassinoGGR / totals.totalGGR) * 100 : 0,
+        ngrPercent: totals.totalNGR > 0 ? (totals.cassinoNGR / totals.totalNGR) * 100 : 0,
+        turnoverPercent: totals.totalTurnover > 0 ? (totals.cassinoTurnover / totals.totalTurnover) * 100 : 0
+      },
+      sportsbook: {
+        ggrPercent: totals.totalGGR > 0 ? (totals.sportsbookGGR / totals.totalGGR) * 100 : 0,
+        ngrPercent: totals.totalNGR > 0 ? (totals.sportsbookNGR / totals.totalNGR) * 100 : 0,
+        turnoverPercent: totals.totalTurnover > 0 ? (totals.sportsbookTurnover / totals.totalTurnover) * 100 : 0
+      }
+    };
+
+    const stats = {
+      totalRegistros: aggregatedData.length,
+      registrosHoje: todayData.length,
+      ultimoRegistro: aggregatedData.length > 0 ? aggregatedData[0] : null,
+      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      periodicidade: '15 minutos',
+      totals: totals,
+      shares: shares
+    };
+
+    res.json({
+      success: true,
+      data: aggregatedData,
+      stats: stats,
+      tipoRelatorio: 'Performance de Produtos',
+      message: aggregatedData.length === 0
+        ? 'Nenhum dado de Performance disponível ainda.'
+        : `${aggregatedData.length} períodos de Performance de Produtos carregados`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint exclusivo para Dashboard do Time de Risco
+ * Filtra apenas dados de "Time de Risco"
+ * Inclui métricas de gestão de risco e jogadores
+ */
+app.get('/api/dashboard-risco', async (req, res) => {
+  try {
+    let allData = [];
+
+    // Ler dados existentes
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      console.log('Nenhum dado armazenado ainda');
+    }
+
+    // Filtrar APENAS Time de Risco
+    const riscoData = allData.filter(item =>
+      item.tipoRelatorio === 'Time de Risco'
+    );
+
+    // Agregar dados por hora
+    const aggregatedData = aggregateDataByHour(riscoData);
+
+    // Calcular estatísticas específicas de Risco
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const today = brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+    const todayData = aggregatedData.filter(item => item.data === today);
+
+    // Calcular totais e médias de métricas de risco
+    const totals = aggregatedData.reduce((acc, item) => {
+      acc.totalGGR += item.ggr || 0;
+      acc.totalNGR += item.ngr || 0;
+      acc.totalDepositos += item.depositos || 0;
+      acc.totalSaques += item.saques || 0;
+      acc.totalFluxoLiquido += item.fluxoLiquido || 0;
+      acc.totalBonusConcedidos += item.bonusConcedidos || 0;
+      acc.totalCustoBonus += item.custoBonus || 0;
+      acc.totalJogadores += item.jogadoresUnicos || 0;
+      acc.count++;
+      return acc;
+    }, {
+      totalGGR: 0,
+      totalNGR: 0,
+      totalDepositos: 0,
+      totalSaques: 0,
+      totalFluxoLiquido: 0,
+      totalBonusConcedidos: 0,
+      totalCustoBonus: 0,
+      totalJogadores: 0,
+      count: 0
+    });
+
+    const averages = {
+      avgGGR: totals.count > 0 ? totals.totalGGR / totals.count : 0,
+      avgNGR: totals.count > 0 ? totals.totalNGR / totals.count : 0,
+      avgDepositos: totals.count > 0 ? totals.totalDepositos / totals.count : 0,
+      avgSaques: totals.count > 0 ? totals.totalSaques / totals.count : 0,
+      avgFluxoLiquido: totals.count > 0 ? totals.totalFluxoLiquido / totals.count : 0,
+      avgJogadores: totals.count > 0 ? totals.totalJogadores / totals.count : 0
+    };
+
+    // Calcular métricas de eficiência
+    const metrics = {
+      retencaoLiquida: totals.totalDepositos > 0
+        ? ((totals.totalDepositos - totals.totalSaques) / totals.totalDepositos) * 100
+        : 0,
+      margemNGR: totals.totalGGR > 0
+        ? (totals.totalNGR / totals.totalGGR) * 100
+        : 0,
+      custoBonusPercent: totals.totalNGR > 0
+        ? (totals.totalCustoBonus / totals.totalNGR) * 100
+        : 0
+    };
+
+    const stats = {
+      totalRegistros: aggregatedData.length,
+      registrosHoje: todayData.length,
+      ultimoRegistro: aggregatedData.length > 0 ? aggregatedData[0] : null,
+      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      periodicidade: '1 hora',
+      totals: totals,
+      averages: averages,
+      metrics: metrics
+    };
+
+    res.json({
+      success: true,
+      data: aggregatedData,
+      stats: stats,
+      tipoRelatorio: 'Time de Risco',
+      message: aggregatedData.length === 0
+        ? 'Nenhum dado de Risco disponível ainda.'
+        : `${aggregatedData.length} períodos de Time de Risco carregados`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint para Dashboard Overview (Visão Geral)
+ * Retorna agregações de alto nível de ambos os tipos de relatório
+ * Usado para visão executiva consolidada
+ */
+app.get('/api/dashboard-overview', async (req, res) => {
+  try {
+    let allData = [];
+
+    // Ler dados existentes
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      console.log('Nenhum dado armazenado ainda');
+    }
+
+    // Separar por tipo
+    const performanceData = allData.filter(item => item.tipoRelatorio === 'Performance de Produtos');
+    const riscoData = allData.filter(item => item.tipoRelatorio === 'Time de Risco');
+
+    // Agregar cada tipo separadamente
+    const aggregatedPerformance = aggregateDataByHour(performanceData);
+    const aggregatedRisco = aggregateDataByHour(riscoData);
+
+    // Calcular métricas consolidadas
+    const now = new Date();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+
+    // Usar dados de RISCO para métricas gerais da plataforma (mais completos e menos frequentes)
+    const platformMetrics = aggregatedRisco.reduce((acc, item) => {
+      acc.totalGGR += item.ggr || 0;
+      acc.totalNGR += item.ngr || 0;
+      acc.totalDepositos += item.depositos || 0;
+      acc.totalSaques += item.saques || 0;
+      acc.count++;
+      return acc;
+    }, { totalGGR: 0, totalNGR: 0, totalDepositos: 0, totalSaques: 0, count: 0 });
+
+    // Breakdown de Performance (Casino vs Sportsbook)
+    const productBreakdown = aggregatedPerformance.reduce((acc, item) => {
+      acc.cassinoGGR += item.cassinoGGR || 0;
+      acc.sportsbookGGR += item.sportsbookGGR || 0;
+      acc.cassinoTurnover += item.cassinoTurnover || 0;
+      acc.sportsbookTurnover += item.sportsbookTurnover || 0;
+      return acc;
+    }, { cassinoGGR: 0, sportsbookGGR: 0, cassinoTurnover: 0, sportsbookTurnover: 0 });
+
+    const totalProductGGR = productBreakdown.cassinoGGR + productBreakdown.sportsbookGGR;
+
+    const overview = {
+      platform: {
+        ggr: platformMetrics.totalGGR,
+        ngr: platformMetrics.totalNGR,
+        depositos: platformMetrics.totalDepositos,
+        saques: platformMetrics.totalSaques,
+        fluxoLiquido: platformMetrics.totalDepositos - platformMetrics.totalSaques,
+        margemNGR: platformMetrics.totalGGR > 0
+          ? (platformMetrics.totalNGR / platformMetrics.totalGGR) * 100
+          : 0
+      },
+      products: {
+        casino: {
+          ggr: productBreakdown.cassinoGGR,
+          turnover: productBreakdown.cassinoTurnover,
+          share: totalProductGGR > 0 ? (productBreakdown.cassinoGGR / totalProductGGR) * 100 : 0
+        },
+        sportsbook: {
+          ggr: productBreakdown.sportsbookGGR,
+          turnover: productBreakdown.sportsbookTurnover,
+          share: totalProductGGR > 0 ? (productBreakdown.sportsbookGGR / totalProductGGR) * 100 : 0
+        }
+      },
+      counts: {
+        performanceRecords: aggregatedPerformance.length,
+        riscoRecords: aggregatedRisco.length,
+        totalRecords: allData.length
+      },
+      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    };
+
+    res.json({
+      success: true,
+      overview: overview,
+      performanceData: aggregatedPerformance.slice(0, 100), // Últimos 100 registros
+      riscoData: aggregatedRisco.slice(0, 100), // Últimos 100 registros
+      message: `Overview consolidado: ${aggregatedPerformance.length} períodos Performance + ${aggregatedRisco.length} períodos Risco`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Endpoint para visualizar anomalias detectadas
  * Análise de Risco Financeiro - Detecção de Fraudes
  */
