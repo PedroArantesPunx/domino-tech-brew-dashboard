@@ -222,8 +222,23 @@ const App = () => {
       const response = await fetch('/api/dashboard-data');
       if (!response.ok) throw new Error('Erro ao conectar com o backend');
       const result = await response.json();
-      setData(result.data || []);
-      setLastUpdate(new Date().toLocaleString('pt-BR'));
+      const dataArray = result.data || [];
+      setData(dataArray);
+
+      // Capturar timestamp do último registro (mais recente)
+      if (dataArray.length > 0) {
+        const latestRecord = dataArray[0];
+        const timestamp = latestRecord.timestamp;
+        const dataHora = `${latestRecord.data} às ${latestRecord.hora}`;
+        const tipo = latestRecord.tipoRelatorio;
+
+        setLastUpdate({
+          timestamp: timestamp,
+          formatted: dataHora,
+          tipo: tipo,
+          fetchedAt: new Date().toLocaleString('pt-BR')
+        });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -740,6 +755,112 @@ const App = () => {
     );
   };
 
+  // Custom Tooltip com informações de tempo precisas
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || !payload.length) return null;
+
+    const data = payload[0].payload;
+
+    return (
+      <div style={{
+        background: darkMode
+          ? 'linear-gradient(135deg, rgba(26, 29, 53, 0.98) 0%, rgba(10, 14, 39, 0.98) 100%)'
+          : 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%)',
+        border: `2px solid ${darkMode ? 'rgba(217, 160, 13, 0.4)' : 'rgba(217, 160, 13, 0.3)'}`,
+        borderRadius: '12px',
+        padding: '16px',
+        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px ${colors.gold}40`,
+        backdropFilter: 'blur(20px)',
+        minWidth: '280px'
+      }}>
+        {/* Cabeçalho com data e hora */}
+        <div style={{
+          marginBottom: '12px',
+          paddingBottom: '12px',
+          borderBottom: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+        }}>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '800',
+            color: colors.gold,
+            marginBottom: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span>📅</span>
+            <span>{data.data || label}</span>
+          </div>
+          <div style={{
+            fontSize: '13px',
+            color: colors.text.secondary,
+            fontWeight: '600',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>🕐</span>
+              <span>{data.hora}</span>
+            </span>
+            <span style={{
+              fontSize: '11px',
+              background: darkMode ? 'rgba(13, 255, 153, 0.2)' : 'rgba(13, 255, 153, 0.15)',
+              color: colors.lime,
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontWeight: '700'
+            }}>
+              {data.tipoRelatorio === 'Performance de Produtos' ? '⏱️ 15min' : '⏱️ 1h'}
+            </span>
+          </div>
+          {data.tipoRelatorio && (
+            <div style={{
+              fontSize: '11px',
+              color: colors.text.tertiary,
+              marginTop: '4px',
+              fontWeight: '600'
+            }}>
+              {data.tipoRelatorio === 'Performance de Produtos' ? '🎰 Performance de Produtos' : '⚠️ Time de Risco'}
+            </div>
+          )}
+        </div>
+
+        {/* Valores */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {payload.map((entry, index) => (
+            <div key={index} style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '6px 8px',
+              background: darkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
+              borderRadius: '8px',
+              borderLeft: `3px solid ${entry.color}`
+            }}>
+              <span style={{
+                fontSize: '12px',
+                color: colors.text.secondary,
+                fontWeight: '600'
+              }}>
+                {entry.name}:
+              </span>
+              <span style={{
+                fontSize: '13px',
+                color: colors.text.primary,
+                fontWeight: '800'
+              }}>
+                {typeof entry.value === 'number'
+                  ? entry.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : entry.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -813,15 +934,102 @@ const App = () => {
               }}>
                 ⚡ Dashboard Analytics Ultra
               </h1>
-              <p style={{
-                fontSize: '13px',
-                color: colors.text.secondary,
-                margin: 0,
-                fontWeight: '600',
-                letterSpacing: '0.5px'
-              }}>
-                Domino Tech & Brew · {lastUpdate || 'Carregando...'}
-              </p>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <p style={{
+                  fontSize: '13px',
+                  color: colors.text.secondary,
+                  margin: 0,
+                  fontWeight: '600',
+                  letterSpacing: '0.5px'
+                }}>
+                  Domino Tech & Brew
+                </p>
+                {lastUpdate && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    padding: '8px 16px',
+                    background: darkMode
+                      ? 'linear-gradient(135deg, rgba(217, 160, 13, 0.15) 0%, rgba(13, 255, 153, 0.15) 100%)'
+                      : 'linear-gradient(135deg, rgba(217, 160, 13, 0.1) 0%, rgba(13, 255, 153, 0.1) 100%)',
+                    borderRadius: '10px',
+                    border: `1px solid ${darkMode ? 'rgba(217, 160, 13, 0.3)' : 'rgba(217, 160, 13, 0.2)'}`,
+                    backdropFilter: 'blur(10px)',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{
+                      fontSize: '20px',
+                      filter: `drop-shadow(0 0 8px ${colors.gold})`
+                    }}>
+                      📡
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span style={{
+                        fontSize: '11px',
+                        color: colors.text.tertiary,
+                        fontWeight: '600',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Última Atualização Slack
+                      </span>
+                      <span style={{
+                        fontSize: '13px',
+                        color: colors.text.primary,
+                        fontWeight: '700'
+                      }}>
+                        {lastUpdate.formatted}
+                      </span>
+                    </div>
+                    <div style={{
+                      height: '32px',
+                      width: '1px',
+                      background: darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'
+                    }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span style={{
+                        fontSize: '11px',
+                        color: colors.text.tertiary,
+                        fontWeight: '600',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Tipo
+                      </span>
+                      <span style={{
+                        fontSize: '12px',
+                        color: colors.text.primary,
+                        fontWeight: '700'
+                      }}>
+                        {lastUpdate.tipo === 'Performance de Produtos' ? '🎰 Performance' : '⚠️ Risco'}
+                      </span>
+                    </div>
+                    <div style={{
+                      height: '32px',
+                      width: '1px',
+                      background: darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'
+                    }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span style={{
+                        fontSize: '11px',
+                        color: colors.text.tertiary,
+                        fontWeight: '600',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Intervalo
+                      </span>
+                      <span style={{
+                        fontSize: '12px',
+                        color: colors.lime,
+                        fontWeight: '700'
+                      }}>
+                        {lastUpdate.tipo === 'Performance de Produtos' ? '⏱️ 15min' : '⏱️ 1h'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
@@ -1498,18 +1706,7 @@ const App = () => {
                         label={{ value: 'Turnover', angle: 90, position: 'insideRight', style: { fill: colors.cyan, fontWeight: '700' } }}
                       />
                     )}
-                    <Tooltip
-                      contentStyle={{
-                        background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                        border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-                        borderRadius: '12px',
-                        backdropFilter: 'blur(20px)',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
-                        padding: '12px',
-                        fontWeight: '600'
-                      }}
-                      labelStyle={{ color: colors.text.primary, marginBottom: '8px', fontWeight: '700' }}
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                     <Legend wrapperStyle={{ fontWeight: '600' }} />
 
                     {/* GGR - Main Metric */}
