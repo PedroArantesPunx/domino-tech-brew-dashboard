@@ -61,13 +61,12 @@ function parseSlackMessage(text, slackTimestamp = null) {
       messageTime = new Date();
     }
 
-    // Converter para timezone de Brasília (UTC-3)
-    const brasiliaTime = new Date(messageTime.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-
+    // Formatar data e hora no timezone de Brasília (UTC-3)
+    // IMPORTANTE: messageTime já está correto em UTC, usar toLocaleString apenas para formatar
     const data = {
-      timestamp: brasiliaTime.toISOString(),
-      hora: brasiliaTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }),
-      data: brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+      timestamp: messageTime.toISOString(),
+      hora: messageTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }),
+      data: messageTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
     };
 
     // Determinar tipo de relatório
