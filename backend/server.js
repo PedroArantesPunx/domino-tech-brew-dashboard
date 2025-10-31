@@ -1229,11 +1229,18 @@ app.get('/api/dashboard-performance', async (req, res) => {
 
     // Filtrar por período se especificado
     const days = parseInt(req.query.days) || null;
+    const date = req.query.date || null; // Formato: DD/MM ou DD/MM/YYYY
     const startDate = req.query.startDate || null;
     const endDate = req.query.endDate || null;
 
-    if (days) {
-      // Filtrar últimos N dias
+    if (date) {
+      // Filtrar por data específica (formato: DD/MM ou DD/MM/YYYY)
+      const dateFilter = date.substring(0, 5); // Pega apenas DD/MM
+      performanceData = performanceData.filter(item => {
+        return item.data === dateFilter;
+      });
+    } else if (days) {
+      // Filtrar últimos N dias (últimas 24h * N)
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
       performanceData = performanceData.filter(item => {
@@ -1251,8 +1258,14 @@ app.get('/api/dashboard-performance', async (req, res) => {
     // Agregar dados por hora
     const aggregatedData = aggregateDataByHour(performanceData);
 
-    // IMPORTANTE: Ordenar por timestamp decrescente (mais recente primeiro)
-    aggregatedData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // IMPORTANTE: Ordenar por timestamp
+    // Se filtrou por data específica, ordem CRESCENTE (cronológica: 00:00 -> 23:59)
+    // Caso contrário, ordem DECRESCENTE (mais recente primeiro)
+    if (date) {
+      aggregatedData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    } else {
+      aggregatedData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
 
     // Calcular estatísticas específicas de Performance
     const now = new Date();
@@ -1375,10 +1388,16 @@ app.get('/api/dashboard-risco', async (req, res) => {
 
     // Filtrar por período se especificado
     const days = parseInt(req.query.days) || null;
+    const date = req.query.date || null;
     const startDate = req.query.startDate || null;
     const endDate = req.query.endDate || null;
 
-    if (days) {
+    if (date) {
+      const dateFilter = date.substring(0, 5);
+      riscoData = riscoData.filter(item => {
+        return item.data === dateFilter;
+      });
+    } else if (days) {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
       riscoData = riscoData.filter(item => {
@@ -1395,8 +1414,12 @@ app.get('/api/dashboard-risco', async (req, res) => {
     // Agregar dados por hora
     const aggregatedData = aggregateDataByHour(riscoData);
 
-    // IMPORTANTE: Ordenar por timestamp decrescente (mais recente primeiro)
-    aggregatedData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // IMPORTANTE: Ordenar por timestamp
+    if (date) {
+      aggregatedData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    } else {
+      aggregatedData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
 
     // Calcular estatísticas específicas de Risco
     const now = new Date();
