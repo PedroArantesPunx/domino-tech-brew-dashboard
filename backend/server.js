@@ -690,6 +690,109 @@ app.get('/api/fetch-messages', async (req, res) => {
 });
 
 /**
+ * Buscar mensagens por período específico (com timestamps oldest/latest)
+ * Útil para recuperar dados de horários específicos que faltam
+ */
+app.get('/api/fetch-messages-period', async (req, res) => {
+  try {
+    const { oldest, latest, date, startHour, endHour } = req.query;
+
+    let oldestTimestamp, latestTimestamp;
+
+    // Opção 1: Usar timestamps Unix diretamente
+    if (oldest && latest) {
+      oldestTimestamp = oldest;
+      latestTimestamp = latest;
+    }
+    // Opção 2: Usar data + horários (formato: date=30/10/2025&startHour=20&endHour=23)
+    else if (date && startHour && endHour) {
+      const [day, month, year] = date.split('/');
+      const startDate = new Date(year, month - 1, day, startHour, 0, 0);
+      const endDate = new Date(year, month - 1, day, endHour, 59, 59);
+      oldestTimestamp = Math.floor(startDate.getTime() / 1000);
+      latestTimestamp = Math.floor(endDate.getTime() / 1000);
+    }
+    else {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros inválidos. Use: oldest+latest (timestamps Unix) OU date+startHour+endHour',
+        examples: [
+          '/api/fetch-messages-period?oldest=1730318400&latest=1730332799',
+          '/api/fetch-messages-period?date=30/10/2025&startHour=20&endHour=23'
+        ]
+      });
+    }
+
+    console.log(`📥 Buscando mensagens do período: ${new Date(oldestTimestamp * 1000).toLocaleString('pt-BR')} até ${new Date(latestTimestamp * 1000).toLocaleString('pt-BR')}`);
+
+    let allMessages = [];
+    let cursor = null;
+    let pageCount = 0;
+    let processedCount = 0;
+
+    do {
+      pageCount++;
+
+      const options = {
+        channel: CHANNEL_ID,
+        oldest: oldestTimestamp.toString(),
+        latest: latestTimestamp.toString(),
+        limit: 1000
+      };
+
+      if (cursor) {
+        options.cursor = cursor;
+      }
+
+      const result = await slackClient.conversations.history(options);
+
+      if (result.messages && result.messages.length > 0) {
+        console.log(`   ✅ Página ${pageCount}: ${result.messages.length} mensagens`);
+        allMessages = allMessages.concat(result.messages);
+
+        // Processar cada mensagem
+        for (const message of result.messages) {
+          if (message.text && (
+            message.text.includes('Relatório de Performance de Produtos') ||
+            message.text.includes('Relatório Time de Risco')
+          )) {
+            const parsedData = parseSlackMessage(message.text, message.ts);
+            if (parsedData) {
+              const saved = await saveData(parsedData);
+              if (saved) processedCount++;
+            }
+          }
+        }
+      }
+
+      cursor = result.response_metadata?.next_cursor;
+
+      if (cursor) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+    } while (cursor);
+
+    res.json({
+      success: true,
+      period: {
+        start: new Date(oldestTimestamp * 1000).toLocaleString('pt-BR'),
+        end: new Date(latestTimestamp * 1000).toLocaleString('pt-BR')
+      },
+      totalMessages: allMessages.length,
+      processedReports: processedCount,
+      pages: pageCount
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Debug: Ver mensagens brutas do Slack
  */
 app.get('/api/debug-messages', async (req, res) => {
