@@ -2326,11 +2326,103 @@ const App = () => {
               textAlign: 'center',
               color: colors.text.secondary,
               fontSize: '14px',
-              marginBottom: '48px',
+              marginBottom: '32px',
               fontWeight: '600'
             }}>
               {produtosData.count} períodos analisados • Intervalo: 15 minutos
             </p>
+
+            {/* ==== TOTAIS ACUMULADOS E VARIAÇÃO ==== */}
+            {performanceData?.stats && (
+              <>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  background: colors.gradients.gold,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '16px',
+                  textAlign: 'center'
+                }}>
+                  📊 Totais Acumulados do Período
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                  <StatCard
+                    title="🎰 Casino - Total GGR"
+                    value={formatCurrency(performanceData.stats.totals?.cassinoGGR || 0)}
+                    icon="💰"
+                    gradient={colors.gradients.gold}
+                  />
+                  <StatCard
+                    title="🎰 Casino - Total NGR"
+                    value={formatCurrency(performanceData.stats.totals?.cassinoNGR || 0)}
+                    icon="💎"
+                    gradient={colors.gradients.lime}
+                  />
+                  <StatCard
+                    title="⚽ Sportsbook - Total GGR"
+                    value={formatCurrency(performanceData.stats.totals?.sportsbookGGR || 0)}
+                    icon="💰"
+                    gradient={colors.gradients.purple}
+                  />
+                  <StatCard
+                    title="⚽ Sportsbook - Total NGR"
+                    value={formatCurrency(performanceData.stats.totals?.sportsbookNGR || 0)}
+                    icon="💎"
+                    gradient={colors.gradients.blueGreen}
+                  />
+                </div>
+
+                {/* Variação do Último Período */}
+                {performanceData.stats.diff && (
+                  <>
+                    <h3 style={{
+                      fontSize: '20px',
+                      fontWeight: '800',
+                      background: colors.gradients.blueGreen,
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      marginBottom: '16px',
+                      textAlign: 'center'
+                    }}>
+                      📈 Variação do Último Período (Δ)
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '48px' }}>
+                      <StatCard
+                        title="🎰 Casino - Δ GGR"
+                        value={formatCurrency(Math.abs(performanceData.stats.diff.casino?.ggr || 0))}
+                        icon={performanceData.stats.diff.casino?.ggr >= 0 ? '📈' : '📉'}
+                        gradient={performanceData.stats.diff.casino?.ggr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
+                        trend={performanceData.stats.diff.casino?.ggr >= 0 ? 'up' : 'down'}
+                      />
+                      <StatCard
+                        title="🎰 Casino - Δ NGR"
+                        value={formatCurrency(Math.abs(performanceData.stats.diff.casino?.ngr || 0))}
+                        icon={performanceData.stats.diff.casino?.ngr >= 0 ? '📈' : '📉'}
+                        gradient={performanceData.stats.diff.casino?.ngr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
+                        trend={performanceData.stats.diff.casino?.ngr >= 0 ? 'up' : 'down'}
+                      />
+                      <StatCard
+                        title="⚽ Sportsbook - Δ GGR"
+                        value={formatCurrency(Math.abs(performanceData.stats.diff.sportsbook?.ggr || 0))}
+                        icon={performanceData.stats.diff.sportsbook?.ggr >= 0 ? '📈' : '📉'}
+                        gradient={performanceData.stats.diff.sportsbook?.ggr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
+                        trend={performanceData.stats.diff.sportsbook?.ggr >= 0 ? 'up' : 'down'}
+                      />
+                      <StatCard
+                        title="⚽ Sportsbook - Δ NGR"
+                        value={formatCurrency(Math.abs(performanceData.stats.diff.sportsbook?.ngr || 0))}
+                        icon={performanceData.stats.diff.sportsbook?.ngr >= 0 ? '📈' : '📉'}
+                        gradient={performanceData.stats.diff.sportsbook?.ngr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
+                        trend={performanceData.stats.diff.sportsbook?.ngr >= 0 ? 'up' : 'down'}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
 
             {/* ==== SEÇÃO CASSINO ==== */}
             <h3 style={{
