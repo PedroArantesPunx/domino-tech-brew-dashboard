@@ -1784,6 +1784,124 @@ app.get('/api/quality-report', async (req, res) => {
   }
 });
 
+// ====================  COBERTURA HORÁRIA ====================
+
+/**
+ * Endpoint para análise de cobertura horária dos disparos
+ * Verifica se todos os horários esperados estão sendo recebidos
+ */
+app.get('/api/coverage-analysis', async (req, res) => {
+  try {
+    let allData = [];
+
+    // Ler dados existentes
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      console.log('Nenhum dado armazenado ainda');
+    }
+
+    // Separar por tipo
+    const performanceData = allData.filter(item => item.tipoRelatorio === 'Performance de Produtos');
+    const riscoData = allData.filter(item => item.tipoRelatorio === 'Time de Risco');
+
+    // Função para analisar cobertura
+    const analyzeCoverage = (data, expectedPerHour = 1) => {
+      const byDate = {};
+
+      data.forEach(item => {
+        const date = item.data;
+        const hora = item.hora ? item.hora.split(':')[0] : '00';
+
+        if (!byDate[date]) {
+          byDate[date] = {};
+        }
+        if (!byDate[date][hora]) {
+          byDate[date][hora] = 0;
+        }
+        byDate[date][hora]++;
+      });
+
+      // Analisar cada data
+      const analysis = {};
+      const dates = Object.keys(byDate).sort().reverse();
+
+      dates.forEach(date => {
+        const hours = byDate[date];
+        const expectedHours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+        const receivedHours = Object.keys(hours);
+        const missingHours = expectedHours.filter(h => !receivedHours.includes(h));
+
+        // Contar disparos totais
+        const totalDisparos = Object.values(hours).reduce((sum, count) => sum + count, 0);
+        const expectedDisparos = 24 * expectedPerHour;
+
+        // Horas incompletas (com menos disparos que o esperado)
+        const incompleteHours = Object.entries(hours)
+          .filter(([_, count]) => count < expectedPerHour)
+          .map(([hour, count]) => ({ hour, count, expected: expectedPerHour }));
+
+        analysis[date] = {
+          totalDisparos,
+          expectedDisparos,
+          hoursWithData: receivedHours.length,
+          expectedHours: 24,
+          missingHours: missingHours.sort(),
+          incompleteHours,
+          coverage: (totalDisparos / expectedDisparos) * 100,
+          isComplete: totalDisparos >= expectedDisparos && missingHours.length === 0,
+          heatmap: hours  // Mapa hora -> quantidade de disparos
+        };
+      });
+
+      return analysis;
+    };
+
+    const performanceCoverage = analyzeCoverage(performanceData, 4);  // 4 disparos/hora
+    const riscoCoverage = analyzeCoverage(riscoData, 1);  // 1 disparo/hora
+
+    // Estatísticas globais
+    const performanceDates = Object.keys(performanceCoverage);
+    const riscoDates = Object.keys(riscoCoverage);
+
+    const perfStats = {
+      totalDays: performanceDates.length,
+      completeDays: performanceDates.filter(d => performanceCoverage[d].isComplete).length,
+      averageCoverage: performanceDates.reduce((sum, d) => sum + performanceCoverage[d].coverage, 0) / performanceDates.length || 0
+    };
+
+    const riscoStats = {
+      totalDays: riscoDates.length,
+      completeDays: riscoDates.filter(d => riscoCoverage[d].isComplete).length,
+      averageCoverage: riscoDates.reduce((sum, d) => sum + riscoCoverage[d].coverage, 0) / riscoDates.length || 0
+    };
+
+    res.json({
+      success: true,
+      performance: {
+        coverage: performanceCoverage,
+        stats: perfStats,
+        expectedPerDay: 96,  // 4 por hora × 24 horas
+        expectedPerHour: 4
+      },
+      risco: {
+        coverage: riscoCoverage,
+        stats: riscoStats,
+        expectedPerDay: 24,  // 1 por hora × 24 horas
+        expectedPerHour: 1
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ==================== INICIALIZAÇÃO ====================
 
 /**
