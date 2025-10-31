@@ -998,16 +998,23 @@ function enrichPerformanceData(data) {
   console.log(`[ENRICH] Processando ${data.length} registros...`);
 
   return data.map((item, idx) => {
-    // Converter timestamp para UTC-3
-    const localTimestamp = convertToUTCMinus3(item.timestamp);
-    const localDate = new Date(localTimestamp);
-    // Usar getUTC* porque o timestamp já foi ajustado para UTC-3
-    const localHora = `${String(localDate.getUTCHours()).padStart(2, '0')}:${String(localDate.getUTCMinutes()).padStart(2, '0')}`;
-    const localData = `${String(localDate.getUTCDate()).padStart(2, '0')}/${String(localDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    // IMPORTANTE: NÃO converter timestamp - ele já está correto em UTC
+    // Apenas formatar hora e data para exibição em timezone de Brasília
+    const itemDate = new Date(item.timestamp);
+    const localHora = itemDate.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo'
+    });
+    const localData = itemDate.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      timeZone: 'America/Sao_Paulo'
+    });
 
     const enriched = {
       ...item,
-      timestamp: localTimestamp,
+      // Manter timestamp original em UTC
       hora: localHora,
       data: localData
     };
@@ -1170,15 +1177,14 @@ app.get('/api/dashboard-data', async (req, res) => {
 
     // Calcular estatísticas usando timezone de Brasília
     const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-    const today = brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+    const today = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
     const todayData = aggregatedData.filter(item => item.data === today);
 
     const stats = {
       totalAlertas: aggregatedData.length,
       alertasHoje: todayData.length,
       ultimoAlerta: aggregatedData.length > 0 ? aggregatedData[aggregatedData.length - 1] : null,
-      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      ultimaAtualizacao: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       totalRegistrosBrutos: allData.length // Para debug
     };
 
@@ -1217,17 +1223,40 @@ app.get('/api/dashboard-performance', async (req, res) => {
     const enrichedData = enrichPerformanceData(allData);
 
     // Filtrar APENAS Performance de Produtos
-    const performanceData = enrichedData.filter(item =>
+    let performanceData = enrichedData.filter(item =>
       item.tipoRelatorio === 'Performance de Produtos'
     );
+
+    // Filtrar por período se especificado
+    const days = parseInt(req.query.days) || null;
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
+
+    if (days) {
+      // Filtrar últimos N dias
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      performanceData = performanceData.filter(item => {
+        const itemDate = new Date(item.timestamp);
+        return itemDate >= cutoffDate;
+      });
+    } else if (startDate && endDate) {
+      // Filtrar por intervalo de datas (formato DD/MM/YYYY)
+      performanceData = performanceData.filter(item => {
+        const itemDateStr = item.data; // Formato: DD/MM
+        return itemDateStr >= startDate && itemDateStr <= endDate;
+      });
+    }
 
     // Agregar dados por hora
     const aggregatedData = aggregateDataByHour(performanceData);
 
+    // IMPORTANTE: Ordenar por timestamp decrescente (mais recente primeiro)
+    aggregatedData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     // Calcular estatísticas específicas de Performance
     const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-    const today = brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+    const today = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
     const todayData = aggregatedData.filter(item => item.data === today);
 
     // Calcular totais de Casino vs Sportsbook
@@ -1295,7 +1324,7 @@ app.get('/api/dashboard-performance', async (req, res) => {
       totalRegistros: aggregatedData.length,
       registrosHoje: todayData.length,
       ultimoRegistro: aggregatedData.length > 0 ? aggregatedData[0] : null,
-      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      ultimaAtualizacao: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       periodicidade: '15 minutos',
       totals: totals,
       shares: shares,
@@ -1340,17 +1369,38 @@ app.get('/api/dashboard-risco', async (req, res) => {
     const enrichedData = enrichPerformanceData(allData);
 
     // Filtrar APENAS Time de Risco
-    const riscoData = enrichedData.filter(item =>
+    let riscoData = enrichedData.filter(item =>
       item.tipoRelatorio === 'Time de Risco'
     );
+
+    // Filtrar por período se especificado
+    const days = parseInt(req.query.days) || null;
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
+
+    if (days) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      riscoData = riscoData.filter(item => {
+        const itemDate = new Date(item.timestamp);
+        return itemDate >= cutoffDate;
+      });
+    } else if (startDate && endDate) {
+      riscoData = riscoData.filter(item => {
+        const itemDateStr = item.data;
+        return itemDateStr >= startDate && itemDateStr <= endDate;
+      });
+    }
 
     // Agregar dados por hora
     const aggregatedData = aggregateDataByHour(riscoData);
 
+    // IMPORTANTE: Ordenar por timestamp decrescente (mais recente primeiro)
+    aggregatedData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     // Calcular estatísticas específicas de Risco
     const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-    const today = brasiliaTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+    const today = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
     const todayData = aggregatedData.filter(item => item.data === today);
 
     // Calcular totais e médias de métricas de risco
@@ -1403,7 +1453,7 @@ app.get('/api/dashboard-risco', async (req, res) => {
       totalRegistros: aggregatedData.length,
       registrosHoje: todayData.length,
       ultimoRegistro: aggregatedData.length > 0 ? aggregatedData[0] : null,
-      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      ultimaAtualizacao: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       periodicidade: '1 hora',
       totals: totals,
       averages: averages,
@@ -1457,7 +1507,6 @@ app.get('/api/dashboard-overview', async (req, res) => {
 
     // Calcular métricas consolidadas
     const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
     // Usar dados de RISCO para métricas gerais da plataforma (mais completos e menos frequentes)
     const platformMetrics = aggregatedRisco.reduce((acc, item) => {
@@ -1508,7 +1557,7 @@ app.get('/api/dashboard-overview', async (req, res) => {
         riscoRecords: aggregatedRisco.length,
         totalRecords: allData.length
       },
-      ultimaAtualizacao: brasiliaTime.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+      ultimaAtualizacao: now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
     };
 
     res.json({
