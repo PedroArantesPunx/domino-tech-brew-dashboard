@@ -284,33 +284,44 @@ function parseSlackMessage(text, slackTimestamp = null) {
 function isDuplicate(newData, existingData) {
   if (!existingData || existingData.length === 0) return false;
 
-  // Buscar o último registro do mesmo tipo de relatório
+  // MÉTODO 1: Verificação rápida por data+hora+tipo (previne duplicatas exatas)
+  const exactMatch = existingData.find(item =>
+    item.tipoRelatorio === newData.tipoRelatorio &&
+    item.data === newData.data &&
+    item.hora === newData.hora
+  );
+
+  if (exactMatch) {
+    console.warn(`⚠️  DUPLICATA EXATA DETECTADA: ${newData.tipoRelatorio} - ${newData.data} ${newData.hora}`);
+    return true;
+  }
+
+  // MÉTODO 2: Verificação por similaridade de campos críticos (previne dados repetidos do Slack)
   const sameTypeRecords = existingData.filter(item => item.tipoRelatorio === newData.tipoRelatorio);
   if (sameTypeRecords.length === 0) return false;
 
   const lastRecord = sameTypeRecords[sameTypeRecords.length - 1];
 
-  // Campos críticos para comparação (excluindo timestamp e hora)
+  // Campos críticos para comparação
   const criticalFields = ['ggr', 'ngr', 'turnoverTotal', 'depositos', 'saques',
                           'cassinoGGR', 'cassinoTurnover', 'sportsbookGGR', 'sportsbookTurnover',
                           'jogadoresUnicos', 'apostadores', 'depositantes'];
 
-  // Verificar se todos os campos críticos são idênticos
+  // Verificar se todos os campos críticos são idênticos ao último registro
   const allFieldsMatch = criticalFields.every(field => {
     const newValue = newData[field];
     const oldValue = lastRecord[field];
 
-    // Ambos null/undefined ou valores iguais
     if (newValue === oldValue) return true;
     if (newValue == null && oldValue == null) return true;
     if (newValue == null || oldValue == null) return false;
 
-    // Comparar números com tolerância de 0.001 para evitar problemas de precisão
+    // Comparar números com tolerância de 0.001
     return Math.abs(newValue - oldValue) < 0.001;
   });
 
   if (allFieldsMatch) {
-    console.warn(`⚠️  DUPLICATA DETECTADA: ${newData.tipoRelatorio} - ${newData.data} ${newData.hora}`);
+    console.warn(`⚠️  DUPLICATA POR SIMILARIDADE: ${newData.tipoRelatorio} - ${newData.data} ${newData.hora}`);
     return true;
   }
 
