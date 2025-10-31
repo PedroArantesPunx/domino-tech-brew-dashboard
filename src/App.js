@@ -2172,15 +2172,59 @@ const App = () => {
             }}>
               ⚠️ Dashboard Time de Risco
             </h2>
-            <p style={{
-              textAlign: 'center',
-              color: colors.text.secondary,
-              fontSize: '14px',
-              marginBottom: '32px',
-              fontWeight: '600'
+            {/* Info Badge */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '16px',
+              flexWrap: 'wrap',
+              marginBottom: '32px'
             }}>
-              {bonusData.count} períodos analisados • Intervalo: 1 hora
-            </p>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(168, 85, 247, 0.1)' : 'rgba(168, 85, 247, 0.1)',
+                border: `1px solid ${colors.purple}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.purple,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                📊 {bonusData.count} períodos analisados
+              </div>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(255, 71, 87, 0.1)' : 'rgba(255, 71, 87, 0.1)',
+                border: `1px solid ${colors.danger}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.danger,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                ⏱️ Intervalo: 1 hora
+              </div>
+              {riscoData?.stats?.ultimaAtualizacao && (
+                <div style={{
+                  padding: '8px 16px',
+                  background: darkMode ? 'rgba(0, 245, 255, 0.1)' : 'rgba(0, 245, 255, 0.1)',
+                  border: `1px solid ${colors.cyan}`,
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.cyan,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  🕐 Última atualização: {riscoData.stats.ultimaAtualizacao}
+                </div>
+              )}
+            </div>
 
             {/* Seção Bônus */}
             <h3 style={{
@@ -2322,15 +2366,59 @@ const App = () => {
             }}>
               🎰 Dashboard Performance de Produtos
             </h2>
-            <p style={{
-              textAlign: 'center',
-              color: colors.text.secondary,
-              fontSize: '14px',
-              marginBottom: '32px',
-              fontWeight: '600'
+            {/* Info Badge */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '16px',
+              flexWrap: 'wrap',
+              marginBottom: '32px'
             }}>
-              {produtosData.count} períodos analisados • Intervalo: 15 minutos
-            </p>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(0, 255, 136, 0.1)' : 'rgba(0, 255, 136, 0.1)',
+                border: `1px solid ${colors.success}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.success,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                📊 {produtosData.count} períodos analisados
+              </div>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(217, 160, 13, 0.1)' : 'rgba(217, 160, 13, 0.1)',
+                border: `1px solid ${colors.text.gold}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.text.gold,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                ⏱️ Intervalo: 15 minutos
+              </div>
+              {performanceData?.stats?.ultimaAtualizacao && (
+                <div style={{
+                  padding: '8px 16px',
+                  background: darkMode ? 'rgba(0, 245, 255, 0.1)' : 'rgba(0, 245, 255, 0.1)',
+                  border: `1px solid ${colors.cyan}`,
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.cyan,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  🕐 Última atualização: {performanceData.stats.ultimaAtualizacao}
+                </div>
+              )}
+            </div>
 
             {/* ==== TOTAIS ACUMULADOS E VARIAÇÃO ==== */}
             {performanceData?.stats && (
