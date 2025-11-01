@@ -6,6 +6,8 @@ import {
   RadialBarChart, RadialBar, ComposedChart, Scatter
 } from 'recharts';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || '';
+
 const App = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -232,7 +234,7 @@ const App = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/dashboard-data');
+      const response = await fetch(`${API_BASE_URL}/api/dashboard-data`);
       if (!response.ok) throw new Error('Erro ao conectar com o backend');
       const result = await response.json();
       const dataArray = result.data || [];
@@ -262,7 +264,7 @@ const App = () => {
   // Buscar dados de anomalias
   const loadAnomalies = React.useCallback(async () => {
     try {
-      const response = await fetch('/api/anomalies');
+      const response = await fetch(`${API_BASE_URL}/api/anomalies`);
       if (!response.ok) return;
       const result = await response.json();
       setAnomaliesData(result);
@@ -293,7 +295,7 @@ const App = () => {
   // Buscar qualidade de dados
   const loadDataQuality = React.useCallback(async () => {
     try {
-      const response = await fetch('/api/data-quality');
+      const response = await fetch(`${API_BASE_URL}/api/data-quality`);
       if (!response.ok) return;
       const result = await response.json();
       setDataQuality(result);
@@ -309,7 +311,7 @@ const App = () => {
     setPerformanceLoading(true);
     setPerformanceError(null);
     try {
-      const response = await fetch('/api/dashboard-performance');
+      const response = await fetch(`${API_BASE_URL}/api/dashboard-performance`);
       if (!response.ok) throw new Error('Erro ao buscar dados de Performance');
       const result = await response.json();
       setPerformanceData(result);
@@ -337,7 +339,7 @@ const App = () => {
     setRiscoLoading(true);
     setRiscoError(null);
     try {
-      const response = await fetch('/api/dashboard-risco');
+      const response = await fetch(`${API_BASE_URL}/api/dashboard-risco`);
       if (!response.ok) throw new Error('Erro ao buscar dados de Risco');
       const result = await response.json();
       setRiscoData(result);
@@ -365,7 +367,7 @@ const App = () => {
     setOverviewLoading(true);
     setOverviewError(null);
     try {
-      const response = await fetch('/api/dashboard-overview');
+      const response = await fetch(`${API_BASE_URL}/api/dashboard-overview`);
       if (!response.ok) throw new Error('Erro ao buscar dados de Overview');
       const result = await response.json();
       setOverviewData(result);
