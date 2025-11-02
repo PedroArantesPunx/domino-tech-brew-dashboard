@@ -45,6 +45,52 @@ const DATA_FILE = path.join(__dirname, 'alertas.json');
 // ==================== FUNÇÕES AUXILIARES ====================
 
 /**
+ * Função para converter número em formato brasileiro (1.234,56) para formato JS (1234.56)
+ * Suporta números negativos (ex: -493,73)
+ * @param {string} numStr - String com número no formato brasileiro
+ * @returns {number} Número convertido
+ */
+function parseBrazilianNumber(numStr) {
+  if (!numStr) return 0;
+
+  // Remover espaços
+  numStr = numStr.trim();
+
+  // Verificar se é negativo
+  const isNegative = numStr.startsWith('-');
+  if (isNegative) {
+    numStr = numStr.substring(1);
+  }
+
+  const hasComma = numStr.includes(',');
+  const hasDot = numStr.includes('.');
+
+  let result;
+
+  if (hasComma && hasDot) {
+    // Formato: "1.234,56" -> 1234.56
+    result = parseFloat(numStr.replace(/\./g, '').replace(',', '.'));
+  } else if (hasComma) {
+    // Formato: "1234,56" -> 1234.56
+    result = parseFloat(numStr.replace(',', '.'));
+  } else if (hasDot) {
+    // Pode ser "1.234" (mil) ou "123.45" (decimal)
+    const parts = numStr.split('.');
+    if (parts.length === 2 && parts[1].length <= 2) {
+      // "123.45" - já está no formato correto
+      result = parseFloat(numStr);
+    } else {
+      // "1.234" - remover ponto
+      result = parseFloat(numStr.replace(/\./g, ''));
+    }
+  } else {
+    result = parseFloat(numStr);
+  }
+
+  return isNegative ? -result : result;
+}
+
+/**
  * Função para extrair dados da mensagem do Slack
  * Suporta dois formatos: "Relatório de Performance de Produtos" e "Relatório Time de Risco"
  * @param {string} text - Texto da mensagem
@@ -74,53 +120,53 @@ function parseSlackMessage(text, slackTimestamp = null) {
       data.tipoRelatorio = 'Performance de Produtos';
 
       // Extrair GGR Total (do TOTAL GERAL)
-      const ggrTotalMatch = text.match(/TOTAL GERAL[\s\S]*?Lucro Bruto \(GGR\):.*?R\$\s*([0-9,\.]+)/);
+      const ggrTotalMatch = text.match(/TOTAL GERAL[\s\S]*?Lucro Bruto\s*\(GGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (ggrTotalMatch) {
-        data.ggr = parseFloat(ggrTotalMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.ggr = parseBrazilianNumber(ggrTotalMatch[1]);
       }
 
       // Extrair NGR Total (do TOTAL GERAL)
-      const ngrTotalMatch = text.match(/TOTAL GERAL[\s\S]*?Lucro Líquido \(NGR\):.*?R\$\s*([0-9,\.]+)/);
+      const ngrTotalMatch = text.match(/TOTAL GERAL[\s\S]*?Lucro Líquido\s*\(NGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (ngrTotalMatch) {
-        data.ngr = parseFloat(ngrTotalMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.ngr = parseBrazilianNumber(ngrTotalMatch[1]);
       }
 
       // Extrair Turnover Total
-      const turnoverMatch = text.match(/Turnover Total:.*?R\$\s*([0-9,\.]+)/);
+      const turnoverMatch = text.match(/Turnover Total:.*?R\$\s*(-?[0-9,\.]+)/);
       if (turnoverMatch) {
-        data.turnoverTotal = parseFloat(turnoverMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.turnoverTotal = parseBrazilianNumber(turnoverMatch[1]);
       }
 
       // Extrair dados do Cassino
-      const cassinoTurnoverMatch = text.match(/CASSINO[\s\S]*?Turnover:.*?R\$\s*([0-9,\.]+)/);
+      const cassinoTurnoverMatch = text.match(/CASSINO[\s\S]*?Turnover:.*?R\$\s*(-?[0-9,\.]+)/);
       if (cassinoTurnoverMatch) {
-        data.cassinoTurnover = parseFloat(cassinoTurnoverMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.cassinoTurnover = parseBrazilianNumber(cassinoTurnoverMatch[1]);
       }
 
-      const cassinoGGRMatch = text.match(/CASSINO[\s\S]*?Lucro Bruto \(GGR\):.*?R\$\s*([0-9,\.]+)/);
+      const cassinoGGRMatch = text.match(/CASSINO[\s\S]*?Lucro Bruto\s*\(GGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (cassinoGGRMatch) {
-        data.cassinoGGR = parseFloat(cassinoGGRMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.cassinoGGR = parseBrazilianNumber(cassinoGGRMatch[1]);
       }
 
-      const cassinoNGRMatch = text.match(/CASSINO[\s\S]*?Lucro Líquido \(NGR\):.*?R\$\s*([0-9,\.]+)/);
+      const cassinoNGRMatch = text.match(/CASSINO[\s\S]*?Lucro Líquido\s*\(NGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (cassinoNGRMatch) {
-        data.cassinoNGR = parseFloat(cassinoNGRMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.cassinoNGR = parseBrazilianNumber(cassinoNGRMatch[1]);
       }
 
       // Extrair dados do Sportsbook
-      const sportsTurnoverMatch = text.match(/SPORTSBOOK[\s\S]*?Turnover:.*?R\$\s*([0-9,\.]+)/);
+      const sportsTurnoverMatch = text.match(/SPORTSBOOK[\s\S]*?Turnover:.*?R\$\s*(-?[0-9,\.]+)/);
       if (sportsTurnoverMatch) {
-        data.sportsbookTurnover = parseFloat(sportsTurnoverMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.sportsbookTurnover = parseBrazilianNumber(sportsTurnoverMatch[1]);
       }
 
-      const sportsGGRMatch = text.match(/SPORTSBOOK[\s\S]*?Lucro Bruto \(GGR\):.*?R\$\s*([0-9,\.]+)/);
+      const sportsGGRMatch = text.match(/SPORTSBOOK[\s\S]*?Lucro Bruto\s*\(GGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (sportsGGRMatch) {
-        data.sportsbookGGR = parseFloat(sportsGGRMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.sportsbookGGR = parseBrazilianNumber(sportsGGRMatch[1]);
       }
 
-      const sportsNGRMatch = text.match(/SPORTSBOOK[\s\S]*?Lucro Líquido \(NGR\):.*?R\$\s*([0-9,\.]+)/);
+      const sportsNGRMatch = text.match(/SPORTSBOOK[\s\S]*?Lucro Líquido\s*\(NGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (sportsNGRMatch) {
-        data.sportsbookNGR = parseFloat(sportsNGRMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.sportsbookNGR = parseBrazilianNumber(sportsNGRMatch[1]);
       }
 
       // Se NGR não foi extraído separadamente, calcular proporcionalmente
@@ -136,33 +182,33 @@ function parseSlackMessage(text, slackTimestamp = null) {
       data.tipoRelatorio = 'Time de Risco';
 
       // Extrair GGR
-      const ggrMatch = text.match(/Lucro Bruto \(GGR\):.*?R\$\s*([0-9,\.]+)/);
+      const ggrMatch = text.match(/Lucro Bruto\s*\(GGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (ggrMatch) {
-        data.ggr = parseFloat(ggrMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.ggr = parseBrazilianNumber(ggrMatch[1]);
       }
 
       // Extrair NGR
-      const ngrMatch = text.match(/Lucro Líquido \(NGR\):.*?R\$\s*([0-9,\.]+)/);
+      const ngrMatch = text.match(/Lucro Líquido\s*\(NGR\)\s*:.*?R\$\s*(-?[0-9,\.]+)/);
       if (ngrMatch) {
-        data.ngr = parseFloat(ngrMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.ngr = parseBrazilianNumber(ngrMatch[1]);
       }
 
       // Extrair Depósitos
-      const depositosMatch = text.match(/Depósitos:.*?R\$\s*([0-9,\.]+)/);
+      const depositosMatch = text.match(/Depósitos:.*?R\$\s*(-?[0-9,\.]+)/);
       if (depositosMatch) {
-        data.depositos = parseFloat(depositosMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.depositos = parseBrazilianNumber(depositosMatch[1]);
       }
 
       // Extrair Saques
-      const saquesMatch = text.match(/Saques:.*?R\$\s*([0-9,\.]+)/);
+      const saquesMatch = text.match(/Saques:.*?R\$\s*(-?[0-9,\.]+)/);
       if (saquesMatch) {
-        data.saques = parseFloat(saquesMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.saques = parseBrazilianNumber(saquesMatch[1]);
       }
 
       // Extrair Fluxo Líquido
-      const fluxoMatch = text.match(/Fluxo Líquido:.*?R\$\s*([0-9,\.]+)/);
+      const fluxoMatch = text.match(/Fluxo Líquido:.*?R\$\s*(-?[0-9,\.]+)/);
       if (fluxoMatch) {
-        data.fluxoLiquido = parseFloat(fluxoMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.fluxoLiquido = parseBrazilianNumber(fluxoMatch[1]);
       }
 
       // Extrair Jogadores Únicos
@@ -186,85 +232,85 @@ function parseSlackMessage(text, slackTimestamp = null) {
       // ==================== NOVOS CAMPOS: SALDO E VARIAÇÃO ====================
 
       // Extrair Saldo Inicial
-      const saldoInicialMatch = text.match(/Saldo Inicial:.*?R\$\s*([0-9,\.]+)/);
+      const saldoInicialMatch = text.match(/Saldo Inicial:.*?R\$\s*(-?[0-9,\.]+)/);
       if (saldoInicialMatch) {
-        data.saldoInicial = parseFloat(saldoInicialMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.saldoInicial = parseBrazilianNumber(saldoInicialMatch[1]);
       }
 
       // Extrair Saldo Final
-      const saldoFinalMatch = text.match(/Saldo Final:.*?R\$\s*([0-9,\.]+)/);
+      const saldoFinalMatch = text.match(/Saldo Final:.*?R\$\s*(-?[0-9,\.]+)/);
       if (saldoFinalMatch) {
-        data.saldoFinal = parseFloat(saldoFinalMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.saldoFinal = parseBrazilianNumber(saldoFinalMatch[1]);
       }
 
       // Extrair Variação de Saldo
-      const variacaoSaldoMatch = text.match(/Variação de Saldo:.*?R\$\s*([0-9,\.]+)/);
+      const variacaoSaldoMatch = text.match(/Variação de Saldo:.*?R\$\s*(-?[0-9,\.]+)/);
       if (variacaoSaldoMatch) {
-        data.variacaoSaldo = parseFloat(variacaoSaldoMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.variacaoSaldo = parseBrazilianNumber(variacaoSaldoMatch[1]);
       }
 
       // ==================== NOVOS CAMPOS: COMPORTAMENTO FINANCEIRO ====================
 
       // Extrair Depósito médio por depositante
-      const depositoMedioMatch = text.match(/Depósito médio \/ depositante:.*?R\$\s*([0-9,\.]+)/);
+      const depositoMedioMatch = text.match(/Depósito médio \/ depositante:.*?R\$\s*(-?[0-9,\.]+)/);
       if (depositoMedioMatch) {
-        data.depositoMedio = parseFloat(depositoMedioMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.depositoMedio = parseBrazilianNumber(depositoMedioMatch[1]);
       }
 
       // Extrair Número médio de depósitos por depositante
-      const numDepositosMatch = text.match(/Nº médio de depósitos \/ depositante:.*?([0-9,\.]+)/);
+      const numDepositosMatch = text.match(/Nº médio de depósitos \/ depositante:.*?(-?[0-9,\.]+)/);
       if (numDepositosMatch) {
-        data.numeroMedioDepositos = parseFloat(numDepositosMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.numeroMedioDepositos = parseBrazilianNumber(numDepositosMatch[1]);
       }
 
       // Extrair Saque médio por sacador
-      const saqueMedioMatch = text.match(/Saque médio \/ sacador:.*?R\$\s*([0-9,\.]+)/);
+      const saqueMedioMatch = text.match(/Saque médio \/ sacador:.*?R\$\s*(-?[0-9,\.]+)/);
       if (saqueMedioMatch) {
-        data.saqueMedio = parseFloat(saqueMedioMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.saqueMedio = parseBrazilianNumber(saqueMedioMatch[1]);
       }
 
       // Extrair Ticket médio por jogador ativo
-      const ticketMedioMatch = text.match(/Ticket médio \/ jogador ativo:.*?R\$\s*([0-9,\.]+)/);
+      const ticketMedioMatch = text.match(/Ticket médio \/ jogador ativo:.*?R\$\s*(-?[0-9,\.]+)/);
       if (ticketMedioMatch) {
-        data.ticketMedio = parseFloat(ticketMedioMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.ticketMedio = parseBrazilianNumber(ticketMedioMatch[1]);
       }
 
       // Extrair GGR médio por jogador ativo
-      const ggrMedioJogadorMatch = text.match(/GGR médio \/ jogador ativo:.*?R\$\s*([0-9,\.]+)/);
+      const ggrMedioJogadorMatch = text.match(/GGR médio \/ jogador ativo:.*?R\$\s*(-?[0-9,\.]+)/);
       if (ggrMedioJogadorMatch) {
-        data.ggrMedioJogador = parseFloat(ggrMedioJogadorMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.ggrMedioJogador = parseBrazilianNumber(ggrMedioJogadorMatch[1]);
       }
 
       // ==================== NOVOS CAMPOS: BÔNUS E PROMOÇÕES ====================
 
       // Extrair Bônus concedidos
-      const bonusConcedidosMatch = text.match(/Bônus concedidos:.*?R\$\s*([0-9,\.]+)/);
+      const bonusConcedidosMatch = text.match(/Bônus concedidos:.*?R\$\s*(-?[0-9,\.]+)/);
       if (bonusConcedidosMatch) {
-        data.bonusConcedidos = parseFloat(bonusConcedidosMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.bonusConcedidos = parseBrazilianNumber(bonusConcedidosMatch[1]);
       }
 
       // Extrair Bônus convertidos em cash
-      const bonusConvertidosMatch = text.match(/Bônus convertidos em cash:.*?R\$\s*([0-9,\.]+)/);
+      const bonusConvertidosMatch = text.match(/Bônus convertidos em cash:.*?R\$\s*(-?[0-9,\.]+)/);
       if (bonusConvertidosMatch) {
-        data.bonusConvertidos = parseFloat(bonusConvertidosMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.bonusConvertidos = parseBrazilianNumber(bonusConvertidosMatch[1]);
       }
 
       // Extrair Taxa de conversão de bônus
-      const taxaConversaoBonusMatch = text.match(/Taxa de conversão:.*?\(\s*([0-9,\.]+)%/);
+      const taxaConversaoBonusMatch = text.match(/Taxa de conversão:.*?\(\s*(-?[0-9,\.]+)%/);
       if (taxaConversaoBonusMatch) {
-        data.taxaConversaoBonus = parseFloat(taxaConversaoBonusMatch[1].replace(',', '.'));
+        data.taxaConversaoBonus = parseBrazilianNumber(taxaConversaoBonusMatch[1]);
       }
 
       // Extrair Apostas feitas com bônus
-      const apostasComBonusMatch = text.match(/Apostas feitas com bônus:.*?R\$\s*([0-9,\.]+)/);
+      const apostasComBonusMatch = text.match(/Apostas feitas com bônus:.*?R\$\s*(-?[0-9,\.]+)/);
       if (apostasComBonusMatch) {
-        data.apostasComBonus = parseFloat(apostasComBonusMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.apostasComBonus = parseBrazilianNumber(apostasComBonusMatch[1]);
       }
 
       // Extrair Custo de bônus
-      const custoBonusMatch = text.match(/Custo de bônus.*?R\$\s*([0-9,\.]+)/);
+      const custoBonusMatch = text.match(/Custo de bônus.*?R\$\s*(-?[0-9,\.]+)/);
       if (custoBonusMatch) {
-        data.custoBonus = parseFloat(custoBonusMatch[1].replace(/\./g, '').replace(',', '.'));
+        data.custoBonus = parseBrazilianNumber(custoBonusMatch[1]);
       }
     }
 

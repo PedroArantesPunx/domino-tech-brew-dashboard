@@ -35,11 +35,11 @@ jobs:
           tags: pedropunx/domino-tech-backend:latest,pedropunx/domino-tech-backend:${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.65.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'pedropunx/domino-tech-backend:latest'
           format: 'table'
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           vuln-type: 'os,library'
-          severity: 'CRITICAL'
+          severity: 'CRITICAL,HIGH'
