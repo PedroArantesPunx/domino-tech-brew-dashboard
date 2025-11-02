@@ -1,11 +1,7 @@
 {
-  "framework": "create-react-app",
   "buildCommand": "npm run build",
   "outputDirectory": "build",
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  "env": {
+    "REACT_APP_API_URL": "https://api-domino.techandbrew.com.br"
+  }
 }
