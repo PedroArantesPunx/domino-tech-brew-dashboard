@@ -635,14 +635,17 @@ async function fetchSlackMessages() {
 
         // Processar cada mensagem
         for (const message of result.messages) {
-          if (message.text && (
-            message.text.includes('Relatório de Performance de Produtos') ||
-            message.text.includes('Relatório Time de Risco')
-          )) {
-            // Passar o timestamp da mensagem do Slack para preservar a data/hora original
-            const parsedData = parseSlackMessage(message.text, message.ts);
-            if (parsedData) {
-              await saveData(parsedData);
+          if (message.text) {
+            // Remover emojis e formatação Markdown para matching mais robusto
+            const cleanText = message.text.replace(/:\w+:/g, '').replace(/\*/g, '');
+
+            if (cleanText.includes('Relatório de Performance de Produtos') ||
+                cleanText.includes('Relatório Time de Risco')) {
+              // Passar o timestamp da mensagem do Slack para preservar a data/hora original
+              const parsedData = parseSlackMessage(message.text, message.ts);
+              if (parsedData) {
+                await saveData(parsedData);
+              }
             }
           }
         }
@@ -797,14 +800,17 @@ app.get('/api/fetch-messages-period', async (req, res) => {
 
         // Processar cada mensagem
         for (const message of result.messages) {
-          if (message.text && (
-            message.text.includes('Relatório de Performance de Produtos') ||
-            message.text.includes('Relatório Time de Risco')
-          )) {
-            const parsedData = parseSlackMessage(message.text, message.ts);
-            if (parsedData) {
-              const saved = await saveData(parsedData);
-              if (saved) processedCount++;
+          if (message.text) {
+            // Remover emojis e formatação Markdown para matching mais robusto
+            const cleanText = message.text.replace(/:\w+:/g, '').replace(/\*/g, '');
+
+            if (cleanText.includes('Relatório de Performance de Produtos') ||
+                cleanText.includes('Relatório Time de Risco')) {
+              const parsedData = parseSlackMessage(message.text, message.ts);
+              if (parsedData) {
+                const saved = await saveData(parsedData);
+                if (saved) processedCount++;
+              }
             }
           }
         }
