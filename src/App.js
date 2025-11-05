@@ -344,26 +344,31 @@ const App = () => {
 
       // Verificar anomalias CRITICAL para alertas
       if (result.anomalies && result.anomalies.CRITICAL && result.anomalies.CRITICAL.length > 0) {
-        const newCriticalAlerts = result.anomalies.CRITICAL.filter(anomaly => {
-          // Verificar se já não está nos alertas atuais
-          return !criticalAlerts.some(alert =>
-            alert.timestamp === anomaly.timestamp && alert.type === anomaly.type
-          );
-        });
-
-        if (newCriticalAlerts.length > 0) {
-          setCriticalAlerts(prev => [...newCriticalAlerts, ...prev].slice(0, 10)); // Manter últimos 10
-
-          // Exibir alerta visual no console
-          newCriticalAlerts.forEach(alert => {
-            console.error('🚨 ALERTA CRITICAL:', alert.message, alert);
+        setCriticalAlerts(prev => {
+          // Filtrar apenas novas anomalias que não existem nos alertas anteriores
+          const newCriticalAlerts = result.anomalies.CRITICAL.filter(anomaly => {
+            return !prev.some(alert =>
+              alert.timestamp === anomaly.timestamp && alert.type === anomaly.type
+            );
           });
-        }
+
+          if (newCriticalAlerts.length > 0) {
+            // Exibir alerta visual no console
+            newCriticalAlerts.forEach(alert => {
+              console.error('🚨 ALERTA CRITICAL:', alert.message, alert);
+            });
+            // Retornar novos alertas + anteriores (manter últimos 10)
+            return [...newCriticalAlerts, ...prev].slice(0, 10);
+          }
+
+          // Sem alterações, retornar estado anterior
+          return prev;
+        });
       }
     } catch (err) {
       console.error('Erro ao buscar anomalias:', err);
     }
-  }, [criticalAlerts]);
+  }, []); // ✅ Sem dependências - função estável
 
   // Buscar qualidade de dados
   const loadDataQuality = React.useCallback(async () => {
