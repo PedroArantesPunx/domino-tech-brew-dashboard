@@ -9,6 +9,13 @@ import {
 const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const App = () => {
+  // ==== ESTADO DE AUTENTICAÇÃO ====
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -103,6 +110,72 @@ const App = () => {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals
     });
+  };
+
+  // ==== VERIFICAR AUTENTICAÇÃO AO CARREGAR ====
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      // Verificar se o token é válido
+      fetch(`${API_BASE_URL}/api/auth/verify`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.valid) {
+          setIsAuthenticated(true);
+        } else {
+          localStorage.removeItem('authToken');
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem('authToken');
+      });
+    }
+  }, []);
+
+  // ==== FUNÇÃO DE LOGIN ====
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setLoginLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: loginUsername,
+          password: loginPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.token) {
+        localStorage.setItem('authToken', data.token);
+        setIsAuthenticated(true);
+        setLoginError('');
+      } else {
+        setLoginError(data.message || 'Usuário ou senha inválidos');
+      }
+    } catch (error) {
+      setLoginError('Erro ao conectar com o servidor');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // ==== FUNÇÃO DE LOGOUT ====
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    setIsAuthenticated(false);
+    setLoginUsername('');
+    setLoginPassword('');
   };
 
   // ==== FUNÇÕES DE MÉDIAS MÓVEIS ====
@@ -964,6 +1037,263 @@ const App = () => {
     );
   };
 
+  // ==== SE NÃO AUTENTICADO, MOSTRAR TELA DE LOGIN ====
+  if (!isAuthenticated) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: `radial-gradient(ellipse at top, ${colors.dark.tertiary} 0%, ${colors.dark.primary} 50%, ${colors.dark.secondary} 100%)`,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        {/* Efeitos de fundo decorativos */}
+        <div style={{
+          position: 'absolute',
+          top: '-30%',
+          right: '-10%',
+          width: '600px',
+          height: '600px',
+          background: colors.gradients.gold,
+          borderRadius: '50%',
+          filter: 'blur(150px)',
+          opacity: 0.15,
+          zIndex: 0,
+          animation: 'float 20s ease-in-out infinite'
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '-20%',
+          left: '-5%',
+          width: '500px',
+          height: '500px',
+          background: colors.gradients.lime,
+          borderRadius: '50%',
+          filter: 'blur(120px)',
+          opacity: 0.12,
+          zIndex: 0,
+          animation: 'float 25s ease-in-out infinite reverse'
+        }} />
+
+        {/* Container do Login */}
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          width: '100%',
+          maxWidth: '420px',
+          padding: '0 20px'
+        }}>
+          {/* Card de Login */}
+          <div style={{
+            background: 'rgba(26, 29, 53, 0.7)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderRadius: '24px',
+            padding: '48px 40px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: `0 20px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(217, 160, 13, 0.15)`
+          }}>
+            {/* Logo/Título */}
+            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+              <div style={{
+                fontSize: '56px',
+                marginBottom: '16px',
+                filter: `drop-shadow(0 0 30px ${colors.gold})`
+              }}>🎰</div>
+              <h1 style={{
+                margin: 0,
+                fontSize: '28px',
+                fontWeight: '800',
+                background: colors.gradients.gold,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                marginBottom: '8px'
+              }}>
+                Domino Tech & Brew
+              </h1>
+              <p style={{
+                margin: 0,
+                fontSize: '14px',
+                color: colors.text.secondary,
+                fontWeight: '600'
+              }}>
+                Dashboard de Monitoramento Financeiro
+              </p>
+            </div>
+
+            {/* Formulário */}
+            <form onSubmit={handleLogin}>
+              {/* Campo Usuário */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Usuário
+                </label>
+                <input
+                  type="text"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  placeholder="Digite seu usuário"
+                  disabled={loginLoading}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    background: 'rgba(10, 14, 39, 0.6)',
+                    border: `2px solid ${loginError ? colors.danger : 'rgba(255, 255, 255, 0.1)'}`,
+                    borderRadius: '12px',
+                    color: colors.text.primary,
+                    outline: 'none',
+                    transition: 'all 0.3s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.border = `2px solid ${colors.gold}`}
+                  onBlur={(e) => e.target.style.border = `2px solid ${loginError ? colors.danger : 'rgba(255, 255, 255, 0.1)'}`}
+                />
+              </div>
+
+              {/* Campo Senha */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Senha
+                </label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Digite sua senha"
+                  disabled={loginLoading}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    background: 'rgba(10, 14, 39, 0.6)',
+                    border: `2px solid ${loginError ? colors.danger : 'rgba(255, 255, 255, 0.1)'}`,
+                    borderRadius: '12px',
+                    color: colors.text.primary,
+                    outline: 'none',
+                    transition: 'all 0.3s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.border = `2px solid ${colors.gold}`}
+                  onBlur={(e) => e.target.style.border = `2px solid ${loginError ? colors.danger : 'rgba(255, 255, 255, 0.1)'}`}
+                />
+              </div>
+
+              {/* Mensagem de Erro */}
+              {loginError && (
+                <div style={{
+                  padding: '12px 16px',
+                  marginBottom: '24px',
+                  background: 'rgba(255, 71, 87, 0.1)',
+                  border: `1px solid ${colors.danger}`,
+                  borderRadius: '12px',
+                  color: colors.danger,
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  textAlign: 'center'
+                }}>
+                  {loginError}
+                </div>
+              )}
+
+              {/* Botão de Login */}
+              <button
+                type="submit"
+                disabled={loginLoading || !loginUsername || !loginPassword}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  background: loginLoading ? colors.text.tertiary : colors.gradients.gold,
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: colors.dark.primary,
+                  cursor: loginLoading || !loginUsername || !loginPassword ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  boxShadow: loginLoading ? 'none' : `0 8px 24px rgba(217, 160, 13, 0.3)`,
+                  opacity: loginLoading || !loginUsername || !loginPassword ? 0.5 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!loginLoading && loginUsername && loginPassword) {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 12px 32px rgba(217, 160, 13, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = loginLoading ? 'none' : '0 8px 24px rgba(217, 160, 13, 0.3)';
+                }}
+              >
+                {loginLoading ? '⏳ Entrando...' : '🔓 Entrar'}
+              </button>
+            </form>
+
+            {/* Informação Adicional */}
+            <div style={{
+              marginTop: '32px',
+              paddingTop: '24px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+              textAlign: 'center',
+              fontSize: '13px',
+              color: colors.text.tertiary,
+              fontWeight: '600'
+            }}>
+              <p style={{ margin: 0 }}>
+                🔒 Acesso restrito
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{
+            marginTop: '24px',
+            textAlign: 'center',
+            fontSize: '12px',
+            color: colors.text.tertiary,
+            fontWeight: '600'
+          }}>
+            Dashboard v5.1 Ultra · Domino Tech & Brew
+          </div>
+        </div>
+
+        {/* CSS Animations */}
+        <style>{`
+          @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(30px, -30px) rotate(5deg); }
+            66% { transform: translate(-20px, 20px) rotate(-5deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ==== DASHBOARD PRINCIPAL (SOMENTE SE AUTENTICADO) ====
   return (
     <div style={{
       minHeight: '100vh',
@@ -1242,6 +1572,32 @@ const App = () => {
                 />
                 Auto-refresh
               </label>
+              <button
+                onClick={handleLogout}
+                style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, rgba(255, 71, 87, 0.2) 0%, rgba(255, 71, 87, 0.1) 100%)',
+                  color: colors.danger,
+                  border: `2px solid ${colors.danger}`,
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  fontSize: '14px',
+                  transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: `0 0 20px ${colors.danger}40`
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)';
+                  e.currentTarget.style.boxShadow = `0 8px 30px ${colors.danger}60`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = `0 0 20px ${colors.danger}40`;
+                }}
+              >
+                🚪 Sair
+              </button>
             </div>
           </div>
         </div>

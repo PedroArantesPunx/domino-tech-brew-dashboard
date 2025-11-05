@@ -10,6 +10,7 @@ const { WebClient } = require('@slack/web-api');
 const fs = require('fs').promises;
 const path = require('path');
 const cors = require('cors');
+const crypto = require('crypto');
 
 // ==================== CONFIGURAÇÃO ====================
 
@@ -29,13 +30,166 @@ const slackClient = new WebClient(SLACK_BOT_TOKEN);
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoint
+// ==================== AUTENTICAÇÃO ====================
+
+// Configuração de usuários (em produção, use banco de dados e hash de senha)
+const USERS = {
+    admin: {
+        username: 'admin',
+        password: process.env.ADMIN_PASSWORD || 'domino2024',  // Altere no .env
+        role: 'admin'
+    }
+};
+
+// Armazenar tokens ativos (em produção, use Redis ou banco de dados)
+const activeSessions = new Map();
+
+/**
+ * Gerar token JWT simplificado
+ */
+function generateToken(username) {
+    const payload = {
+        username,
+        timestamp: Date.now(),
+        random: crypto.randomBytes(16).toString('hex')
+    };
+    const token = Buffer.from(JSON.stringify(payload)).toString('base64');
+    return token;
+}
+
+/**
+ * Verificar token
+ */
+function verifyToken(token) {
+    try {
+        const payload = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+
+        // Verificar se o token está ativo
+        if (!activeSessions.has(token)) {
+            return null;
+        }
+
+        // Verificar se o token não expirou (24 horas)
+        const tokenAge = Date.now() - payload.timestamp;
+        const maxAge = 24 * 60 * 60 * 1000; // 24 horas
+
+        if (tokenAge > maxAge) {
+            activeSessions.delete(token);
+            return null;
+        }
+
+        return payload;
+    } catch (error) {
+        return null;
+    }
+}
+
+/**
+ * Middleware de autenticação
+ */
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Token não fornecido' });
+    }
+
+    const token = authHeader.substring(7);
+    const payload = verifyToken(token);
+
+    if (!payload) {
+        return res.status(401).json({ message: 'Token inválido ou expirado' });
+    }
+
+    req.user = payload;
+    next();
+}
+
+// ==================== ENDPOINTS DE AUTENTICAÇÃO ====================
+
+/**
+ * POST /api/auth/login
+ * Fazer login e receber token
+ */
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+
+    console.log('🔐 Tentativa de login:', username);
+
+    if (!username || !password) {
+        return res.status(400).json({ message: 'Usuário e senha são obrigatórios' });
+    }
+
+    const user = USERS[username];
+
+    if (!user || user.password !== password) {
+        console.log('❌ Login falhou:', username);
+        return res.status(401).json({ message: 'Usuário ou senha inválidos' });
+    }
+
+    // Gerar token
+    const token = generateToken(username);
+    activeSessions.set(token, {
+        username,
+        createdAt: new Date().toISOString()
+    });
+
+    console.log('✅ Login bem-sucedido:', username);
+
+    res.json({
+        token,
+        username,
+        role: user.role
+    });
+});
+
+/**
+ * GET /api/auth/verify
+ * Verificar se o token é válido
+ */
+app.get('/api/auth/verify', (req, res) => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.json({ valid: false });
+    }
+
+    const token = authHeader.substring(7);
+    const payload = verifyToken(token);
+
+    if (!payload) {
+        return res.json({ valid: false });
+    }
+
+    res.json({
+        valid: true,
+        username: payload.username
+    });
+});
+
+/**
+ * POST /api/auth/logout
+ * Fazer logout (invalida o token)
+ */
+app.post('/api/auth/logout', authMiddleware, (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader.substring(7);
+
+    activeSessions.delete(token);
+
+    console.log('👋 Logout:', req.user.username);
+
+    res.json({ message: 'Logout realizado com sucesso' });
+});
+
+// Health check endpoint (não requer autenticação)
 app.get('/api/health', (req, res) => {
     res.status(200).json({
         status: 'OK',
         timestamp: new Date().toISOString(),
         service: 'dashboard-backend',
-        version: '1.0.0'
+        version: '1.0.0',
+        activeSessions: activeSessions.size
     });
 });
 
