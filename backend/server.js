@@ -1809,7 +1809,7 @@ app.get('/api/dashboard-overview', async (req, res) => {
  * GET /api/dashboard-saldo
  * Retorna métricas de saldo inicial, final e variação
  */
-app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
+app.get('/api/dashboard-saldo', authMiddleware, async (req, res) => {
   console.log('🔵 [DEBUG] Endpoint /api/dashboard-saldo iniciado');
   try {
     let allData = [];
@@ -1899,7 +1899,7 @@ app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
  * GET /api/dashboard-usuarios
  * Retorna métricas de comportamento financeiro dos usuários
  */
-app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
+app.get('/api/dashboard-usuarios', authMiddleware, async (req, res) => {
   console.log('🟢 [DEBUG] Endpoint /api/dashboard-usuarios iniciado');
   try {
     let allData = [];
