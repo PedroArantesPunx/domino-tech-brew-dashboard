@@ -1,0 +1,49 @@
+name: Deploy Backend to Home Server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚀 Deploy to Backend Server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.BACKEND_HOST }}
+          username: ${{ secrets.BACKEND_USER }}
+          password: ${{ secrets.BACKEND_PASSWORD }}
+          port: 22
+          script: |
+            cd domino-dashboard
+
+            echo "📥 Atualizando código do repositório..."
+            git pull origin main
+
+            echo "🛑 Parando container..."
+            docker stop dashboard-backend 2>/dev/null || true
+            docker rm dashboard-backend 2>/dev/null || true
+
+            echo "🔨 Reconstruindo imagem..."
+            docker build -t pedropunx/domino-tech-backend:latest ./backend
+
+            echo "🚀 Iniciando container..."
+            docker compose up -d backend
+
+            echo "⏳ Aguardando 15 segundos..."
+            sleep 15
+
+            echo "✅ Status do container:"
+            docker compose ps
+
+            echo "🏥 Health check:"
+            curl -s http://localhost:3001/api/health || echo "Aguardando..."
+
+            echo "📋 Logs:"
+            docker compose logs --tail 20 backend

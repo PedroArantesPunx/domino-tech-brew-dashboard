@@ -1,0 +1,20 @@
+# Backend Dockerfile - Development
+FROM node:18-alpine
+
+# Definir diretório de trabalho
+WORKDIR /app
+
+# Copiar package.json e package-lock.json
+COPY package*.json ./
+
+# Instalar TODAS as dependências (incluindo devDependencies para nodemon)
+RUN npm ci
+
+# Copiar código fonte
+COPY . .
+
+# Expor porta
+EXPOSE 3001
+
+# Comando para iniciar com nodemon (hot-reload)
+CMD ["npm", "run", "dev"]

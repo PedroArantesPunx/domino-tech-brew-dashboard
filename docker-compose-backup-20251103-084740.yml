@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Backend API - Node.js + Slack Integration
   backend:
-    image: dashboard-backend-new
+    image: pedropunx/domino-tech-backend:latest
     container_name: dashboard-backend
     restart: unless-stopped
     env_file:

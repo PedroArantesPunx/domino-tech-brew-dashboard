@@ -1,0 +1,52 @@
+version: '3.8'
+
+# docker-compose.dev.yml
+# Este arquivo é para uso exclusivo em ambiente de desenvolvimento local.
+# Ele permite hot-reloading para o backend e constrói o frontend localmente.
+#
+# Como usar:
+# 1. Certifique-se de que o arquivo 'backend/.env' está configurado.
+# 2. Execute: docker-compose -f docker-compose.dev.yml up --build
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: domino-backend-dev
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3002:3001"
+    volumes:
+      # Monta o código-fonte do backend para permitir hot-reloading.
+      # O server.js será monitorado por 'nodemon' (a ser adicionado).
+      - ./backend:/app
+      # Impede que o node_modules local seja usado dentro do contêiner.
+      - /app/node_modules
+    command: >
+      sh -c "npm install && npm run dev"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: domino-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
