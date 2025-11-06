@@ -2578,3 +2578,4 @@ OUTROS:
 });
 // Triggering pipeline again to test new Docker Hub token
 // GitHub Actions test - qui 06 nov 2025 00:49:13 -03
+# Trigger deploy
