@@ -43,6 +43,16 @@ const App = () => {
   const [riscoError, setRiscoError] = useState(null);
   const [overviewError, setOverviewError] = useState(null);
 
+  // ==== ESTADOS PARA NOVOS DASHBOARDS (Saldo e Usuários) ====
+  const [saldoData, setSaldoData] = useState(null);
+  const [usuariosData, setUsuariosData] = useState(null);
+
+  const [saldoLoading, setSaldoLoading] = useState(false);
+  const [usuariosLoading, setUsuariosLoading] = useState(false);
+
+  const [saldoError, setSaldoError] = useState(null);
+  const [usuariosError, setUsuariosError] = useState(null);
+
   // ==== ESTADOS PARA CONTROLES AVANÇADOS DE GRÁFICOS ====
   const [chartType, setChartType] = useState('line'); // line, bar, area, candle, scatter
   const [timeAggregation, setTimeAggregation] = useState('original'); // original, minutes, hours, days, weeks, months, years
@@ -457,6 +467,50 @@ const App = () => {
     }
   }, []);
 
+  // Buscar dados de Saldo (Fluxo de Caixa)
+  const loadSaldoData = React.useCallback(async () => {
+    setSaldoLoading(true);
+    setSaldoError(null);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/api/dashboard-saldo`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error('Erro ao buscar dados de Saldo');
+      const result = await response.json();
+      setSaldoData(result);
+    } catch (err) {
+      setSaldoError(err.message);
+      console.error('Erro ao buscar Saldo:', err);
+    } finally {
+      setSaldoLoading(false);
+    }
+  }, []);
+
+  // Buscar dados de Usuários (LTV & Comportamento)
+  const loadUsuariosData = React.useCallback(async () => {
+    setUsuariosLoading(true);
+    setUsuariosError(null);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/api/dashboard-usuarios`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error('Erro ao buscar dados de Usuários');
+      const result = await response.json();
+      setUsuariosData(result);
+    } catch (err) {
+      setUsuariosError(err.message);
+      console.error('Erro ao buscar Usuários:', err);
+    } finally {
+      setUsuariosLoading(false);
+    }
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { loadAnomalies(); loadDataQuality(); }, [loadAnomalies, loadDataQuality]);
 
@@ -465,7 +519,9 @@ const App = () => {
     loadPerformanceData();
     loadRiscoData();
     loadOverviewData();
-  }, [loadPerformanceData, loadRiscoData, loadOverviewData]);
+    loadSaldoData();
+    loadUsuariosData();
+  }, [loadPerformanceData, loadRiscoData, loadOverviewData, loadSaldoData, loadUsuariosData]);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -476,10 +532,12 @@ const App = () => {
         loadPerformanceData();
         loadRiscoData();
         loadOverviewData();
+        loadSaldoData();
+        loadUsuariosData();
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, loadData, loadAnomalies, loadDataQuality, loadPerformanceData, loadRiscoData, loadOverviewData]);
+  }, [autoRefresh, loadData, loadAnomalies, loadDataQuality, loadPerformanceData, loadRiscoData, loadOverviewData, loadSaldoData, loadUsuariosData]);
 
   const filteredData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -1626,6 +1684,8 @@ const App = () => {
             { id: 'performance', label: '🎰 Performance', icon: '🎰' },
             { id: 'risco', label: '⚠️ Time de Risco', icon: '⚠️' },
             { id: 'overview', label: '📈 Overview Geral', icon: '📈' },
+            { id: 'saldo', label: '💰 Fluxo de Caixa', icon: '💰' },
+            { id: 'usuarios', label: '👥 Análise de Usuários', icon: '👥' },
             { id: 'anomalias', label: '🚨 Anomalias', icon: '🛡️' }
           ].map(tab => (
             <button
@@ -3461,6 +3521,405 @@ const App = () => {
                 </div>
               </div>
             )}
+          </>
+        )}
+        {/* ==== DASHBOARD FLUXO DE CAIXA (SALDO) ==== */}
+        {activeDashboard === 'saldo' && saldoData && saldoData.stats && (
+          <>
+            <h2 style={{
+              fontSize: '28px',
+              fontWeight: '900',
+              background: colors.gradients.gold,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}>
+              💰 Dashboard de Fluxo de Caixa
+            </h2>
+
+            {/* Info Badges */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '16px',
+              flexWrap: 'wrap',
+              marginBottom: '32px'
+            }}>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(217, 160, 13, 0.1)' : 'rgba(217, 160, 13, 0.1)',
+                border: `1px solid ${colors.gold}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.gold,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                📊 {saldoData.count} registros de saldo
+              </div>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(0, 245, 255, 0.1)' : 'rgba(0, 245, 255, 0.1)',
+                border: `1px solid ${colors.cyan}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.cyan
+              }}>
+                🕐 {saldoData.stats.ultimaAtualizacao}
+              </div>
+            </div>
+
+            {/* KPI Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+              <StatCard
+                title="💰 Saldo Atual"
+                value={formatCurrency(saldoData.stats.saldoAtual)}
+                icon="💵"
+                gradient={colors.gradients.gold}
+              />
+              <StatCard
+                title="📊 Variação Total"
+                value={formatCurrency(saldoData.stats.variacaoTotal)}
+                icon={saldoData.stats.variacaoTotal >= 0 ? "📈" : "📉"}
+                gradient={saldoData.stats.variacaoTotal >= 0 ? colors.gradients.lime : colors.gradients.sunset}
+              />
+              <StatCard
+                title="⬆️ Maior Saldo"
+                value={formatCurrency(saldoData.stats.maiorSaldo)}
+                icon="🔝"
+                gradient={colors.gradients.blueGreen}
+              />
+              <StatCard
+                title="⬇️ Menor Saldo"
+                value={formatCurrency(saldoData.stats.menorSaldo)}
+                icon="📍"
+                gradient={colors.gradients.purple}
+              />
+            </div>
+
+            {/* Gráficos */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '32px', marginBottom: '40px' }}>
+              <GlassCard>
+                <h3 style={{
+                  color: colors.text.primary,
+                  fontSize: '18px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  background: colors.gradients.gold,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  📊 Evolução de Saldo
+                </h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <AreaChart data={saldoData.data}>
+                    <defs>
+                      <linearGradient id="saldoGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={colors.gold} stopOpacity={0.8} />
+                        <stop offset="100%" stopColor={colors.gold} stopOpacity={0.1} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
+                    <XAxis dataKey="timestamp" angle={-45} textAnchor="end" height={100} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
+                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
+                    <Tooltip contentStyle={{
+                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                      borderRadius: '12px',
+                      backdropFilter: 'blur(20px)',
+                      fontWeight: '600'
+                    }} />
+                    <Legend />
+                    <Area type="monotone" dataKey="saldoFinal" name="Saldo Final" stroke={colors.gold} fill="url(#saldoGrad)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </GlassCard>
+
+              <GlassCard>
+                <h3 style={{
+                  color: colors.text.primary,
+                  fontSize: '18px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  background: colors.gradients.lime,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  📈 Variação de Saldo por Período
+                </h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={saldoData.data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
+                    <XAxis dataKey="timestamp" angle={-45} textAnchor="end" height={100} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
+                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
+                    <Tooltip contentStyle={{
+                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                      borderRadius: '12px',
+                      backdropFilter: 'blur(20px)',
+                      fontWeight: '600'
+                    }} />
+                    <Legend />
+                    <Bar dataKey="variacao" name="Variação" fill={colors.lime} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </GlassCard>
+            </div>
+          </>
+        )}
+
+        {/* ==== DASHBOARD ANÁLISE DE USUÁRIOS (LTV & COMPORTAMENTO) ==== */}
+        {activeDashboard === 'usuarios' && usuariosData && usuariosData.stats && (
+          <>
+            <h2 style={{
+              fontSize: '28px',
+              fontWeight: '900',
+              background: colors.gradients.purple,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}>
+              👥 Dashboard de Análise de Usuários
+            </h2>
+
+            {/* Info Badges */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '16px',
+              flexWrap: 'wrap',
+              marginBottom: '32px'
+            }}>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(168, 85, 247, 0.1)' : 'rgba(168, 85, 247, 0.1)',
+                border: `1px solid ${colors.purple}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.purple,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                📊 {usuariosData.count} períodos analisados
+              </div>
+              <div style={{
+                padding: '8px 16px',
+                background: darkMode ? 'rgba(0, 245, 255, 0.1)' : 'rgba(0, 245, 255, 0.1)',
+                border: `1px solid ${colors.cyan}`,
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700',
+                color: colors.cyan
+              }}>
+                🕐 {usuariosData.stats.ultimaAtualizacao}
+              </div>
+            </div>
+
+            {/* KPI Cards - Médias */}
+            <h3 style={{
+              fontSize: '22px',
+              fontWeight: '800',
+              background: colors.gradients.gold,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '24px'
+            }}>
+              💰 Métricas Médias (LTV)
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+              <StatCard
+                title="💵 Depósito Médio"
+                value={formatCurrency(usuariosData.stats.depositoMedio)}
+                icon="💰"
+                gradient={colors.gradients.gold}
+              />
+              <StatCard
+                title="💸 Saque Médio"
+                value={formatCurrency(usuariosData.stats.saqueMedio)}
+                icon="💳"
+                gradient={colors.gradients.blueGreen}
+              />
+              <StatCard
+                title="🎫 Ticket Médio"
+                value={formatCurrency(usuariosData.stats.ticketMedio)}
+                icon="🎰"
+                gradient={colors.gradients.purple}
+              />
+              <StatCard
+                title="💎 GGR Médio/Jogador"
+                value={formatCurrency(usuariosData.stats.ggrMedioJogador)}
+                icon="💰"
+                gradient={colors.gradients.lime}
+              />
+            </div>
+
+            {/* Segmentação de Usuários */}
+            <h3 style={{
+              fontSize: '22px',
+              fontWeight: '800',
+              background: colors.gradients.purple,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '24px'
+            }}>
+              👥 Segmentação de Usuários
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+              <GlassCard>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>🐋</div>
+                  <div style={{ fontSize: '32px', fontWeight: '800', color: colors.gold, marginBottom: '8px' }}>
+                    {usuariosData.segmentacao.baleias}
+                  </div>
+                  <div style={{ fontSize: '14px', color: colors.text.secondary, fontWeight: '600' }}>
+                    Baleias (Ticket &gt; R$ 1.000)
+                  </div>
+                </div>
+              </GlassCard>
+              <GlassCard>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>💎</div>
+                  <div style={{ fontSize: '32px', fontWeight: '800', color: colors.cyan, marginBottom: '8px' }}>
+                    {usuariosData.segmentacao.altoValor}
+                  </div>
+                  <div style={{ fontSize: '14px', color: colors.text.secondary, fontWeight: '600' }}>
+                    Alto Valor (R$ 500-1.000)
+                  </div>
+                </div>
+              </GlassCard>
+              <GlassCard>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎰</div>
+                  <div style={{ fontSize: '32px', fontWeight: '800', color: colors.purple, marginBottom: '8px' }}>
+                    {usuariosData.segmentacao.medioValor}
+                  </div>
+                  <div style={{ fontSize: '14px', color: colors.text.secondary, fontWeight: '600' }}>
+                    Médio Valor (R$ 100-500)
+                  </div>
+                </div>
+              </GlassCard>
+              <GlassCard>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎲</div>
+                  <div style={{ fontSize: '32px', fontWeight: '800', color: colors.lime, marginBottom: '8px' }}>
+                    {usuariosData.segmentacao.casual}
+                  </div>
+                  <div style={{ fontSize: '14px', color: colors.text.secondary, fontWeight: '600' }}>
+                    Casual (&lt; R$ 100)
+                  </div>
+                </div>
+              </GlassCard>
+            </div>
+
+            {/* Gráficos */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '40px' }}>
+              <GlassCard>
+                <h3 style={{
+                  color: colors.text.primary,
+                  fontSize: '18px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  background: colors.gradients.gold,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  💰 Evolução de Ticket Médio
+                </h3>
+                <ResponsiveContainer width="100%" height={350}>
+                  <LineChart data={usuariosData.data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
+                    <XAxis dataKey="timestamp" angle={-45} textAnchor="end" height={80} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
+                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
+                    <Tooltip contentStyle={{
+                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                      borderRadius: '12px',
+                      backdropFilter: 'blur(20px)',
+                      fontWeight: '600'
+                    }} />
+                    <Legend />
+                    <Line type="monotone" dataKey="ticketMedio" name="Ticket Médio" stroke={colors.gold} strokeWidth={3} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </GlassCard>
+
+              <GlassCard>
+                <h3 style={{
+                  color: colors.text.primary,
+                  fontSize: '18px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  background: colors.gradients.purple,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  💎 GGR Médio por Jogador
+                </h3>
+                <ResponsiveContainer width="100%" height={350}>
+                  <LineChart data={usuariosData.data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
+                    <XAxis dataKey="timestamp" angle={-45} textAnchor="end" height={80} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
+                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
+                    <Tooltip contentStyle={{
+                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                      borderRadius: '12px',
+                      backdropFilter: 'blur(20px)',
+                      fontWeight: '600'
+                    }} />
+                    <Legend />
+                    <Line type="monotone" dataKey="ggrMedioJogador" name="GGR Médio/Jogador" stroke={colors.purple} strokeWidth={3} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </GlassCard>
+
+              <GlassCard style={{ gridColumn: 'span 2' }}>
+                <h3 style={{
+                  color: colors.text.primary,
+                  fontSize: '18px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  background: colors.gradients.blueGreen,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  💵 Depósito Médio vs Saque Médio
+                </h3>
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={usuariosData.data.slice(-20)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'} />
+                    <XAxis dataKey="timestamp" angle={-45} textAnchor="end" height={80} stroke={colors.text.tertiary} style={{ fontSize: '11px' }} />
+                    <YAxis stroke={colors.text.tertiary} style={{ fontSize: '12px' }} />
+                    <Tooltip contentStyle={{
+                      background: darkMode ? 'rgba(26, 29, 53, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                      border: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                      borderRadius: '12px',
+                      backdropFilter: 'blur(20px)',
+                      fontWeight: '600'
+                    }} />
+                    <Legend />
+                    <Bar dataKey="depositoMedio" name="Depósito Médio" fill={colors.lime} />
+                    <Bar dataKey="saqueMedio" name="Saque Médio" fill={colors.cyan} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </GlassCard>
+            </div>
           </>
         )}
 

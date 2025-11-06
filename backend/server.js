@@ -1805,6 +1805,199 @@ app.get('/api/dashboard-overview', async (req, res) => {
 });
 
 /**
+ * Endpoint: Dashboard de Fluxo de Caixa (Saldo)
+ * GET /api/dashboard-saldo
+ * Retorna métricas de saldo inicial, final e variação
+ */
+app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
+  try {
+    let allData = [];
+
+    // Ler dados existentes
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      console.log('Nenhum dado armazenado ainda');
+    }
+
+    // Filtrar apenas dados de Time de Risco (que contém saldo)
+    const riscoData = allData.filter(item =>
+      item.tipoRelatorio === 'Time de Risco' &&
+      (item.saldoInicial !== null || item.saldoFinal !== null)
+    );
+
+    if (riscoData.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        stats: null,
+        message: 'Nenhum dado de saldo disponível'
+      });
+    }
+
+    // Ordenar por data e hora
+    const sortedData = riscoData.sort((a, b) => {
+      const dateA = new Date(`${a.data} ${a.hora}`);
+      const dateB = new Date(`${b.data} ${b.hora}`);
+      return dateA - dateB;
+    });
+
+    // Calcular estatísticas
+    const stats = {
+      saldoAtual: sortedData[sortedData.length - 1]?.saldoFinal || 0,
+      saldoPrimeiro: sortedData[0]?.saldoInicial || 0,
+      variacaoTotal: (sortedData[sortedData.length - 1]?.saldoFinal || 0) - (sortedData[0]?.saldoInicial || 0),
+      maiorSaldo: Math.max(...sortedData.map(item => item.saldoFinal || 0)),
+      menorSaldo: Math.min(...sortedData.filter(item => item.saldoFinal).map(item => item.saldoFinal)),
+      variacaoMedia: sortedData.reduce((sum, item) => sum + (item.variacaoSaldo || 0), 0) / sortedData.length,
+      totalRegistros: sortedData.length,
+      ultimaAtualizacao: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    };
+
+    // Preparar dados para gráficos
+    const chartData = sortedData.map(item => ({
+      timestamp: `${item.data} ${item.hora}`,
+      saldoInicial: item.saldoInicial || 0,
+      saldoFinal: item.saldoFinal || 0,
+      variacao: item.variacaoSaldo || 0,
+      data: item.data,
+      hora: item.hora
+    }));
+
+    res.json({
+      success: true,
+      data: chartData,
+      stats: stats,
+      count: sortedData.length,
+      message: `${sortedData.length} registros de saldo processados`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Dashboard de Análise de Usuários (LTV & Comportamento)
+ * GET /api/dashboard-usuarios
+ * Retorna métricas de comportamento financeiro dos usuários
+ */
+app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
+  try {
+    let allData = [];
+
+    // Ler dados existentes
+    try {
+      const fileContent = await fs.readFile(DATA_FILE, 'utf8');
+      allData = JSON.parse(fileContent);
+    } catch (error) {
+      console.log('Nenhum dado armazenado ainda');
+    }
+
+    // Filtrar apenas dados de Time de Risco (que contém métricas de usuários)
+    const riscoData = allData.filter(item =>
+      item.tipoRelatorio === 'Time de Risco' &&
+      (item.depositoMedio || item.ticketMedio || item.ggrMedioJogador)
+    );
+
+    if (riscoData.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        stats: null,
+        message: 'Nenhum dado de usuários disponível'
+      });
+    }
+
+    // Ordenar por data e hora
+    const sortedData = riscoData.sort((a, b) => {
+      const dateA = new Date(`${a.data} ${a.hora}`);
+      const dateB = new Date(`${b.data} ${b.hora}`);
+      return dateA - dateB;
+    });
+
+    // Calcular estatísticas agregadas
+    const validDepositos = sortedData.filter(item => item.depositoMedio > 0);
+    const validSaques = sortedData.filter(item => item.saqueMedio > 0);
+    const validTickets = sortedData.filter(item => item.ticketMedio > 0);
+    const validGGR = sortedData.filter(item => item.ggrMedioJogador > 0);
+
+    const stats = {
+      depositoMedio: validDepositos.length > 0
+        ? validDepositos.reduce((sum, item) => sum + item.depositoMedio, 0) / validDepositos.length
+        : 0,
+      saqueMedio: validSaques.length > 0
+        ? validSaques.reduce((sum, item) => sum + item.saqueMedio, 0) / validSaques.length
+        : 0,
+      ticketMedio: validTickets.length > 0
+        ? validTickets.reduce((sum, item) => sum + item.ticketMedio, 0) / validTickets.length
+        : 0,
+      ggrMedioJogador: validGGR.length > 0
+        ? validGGR.reduce((sum, item) => sum + item.ggrMedioJogador, 0) / validGGR.length
+        : 0,
+      numeroMedioDepositos: sortedData.filter(item => item.numeroMedioDepositos).length > 0
+        ? sortedData.filter(item => item.numeroMedioDepositos).reduce((sum, item) => sum + item.numeroMedioDepositos, 0) / sortedData.filter(item => item.numeroMedioDepositos).length
+        : 0,
+      // Últimos valores
+      depositoMedioAtual: sortedData[sortedData.length - 1]?.depositoMedio || 0,
+      ticketMedioAtual: sortedData[sortedData.length - 1]?.ticketMedio || 0,
+      ggrMedioAtual: sortedData[sortedData.length - 1]?.ggrMedioJogador || 0,
+      totalRegistros: sortedData.length,
+      ultimaAtualizacao: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    };
+
+    // Segmentação de usuários por ticket médio (últimos dados disponíveis)
+    const ultimosDados = sortedData.slice(-50); // Últimos 50 registros
+    const segmentacao = {
+      baleias: 0, // Ticket > 1000
+      altoValor: 0, // Ticket 500-1000
+      medioValor: 0, // Ticket 100-500
+      casual: 0 // Ticket < 100
+    };
+
+    ultimosDados.forEach(item => {
+      const ticket = item.ticketMedio || 0;
+      if (ticket > 1000) segmentacao.baleias++;
+      else if (ticket >= 500) segmentacao.altoValor++;
+      else if (ticket >= 100) segmentacao.medioValor++;
+      else if (ticket > 0) segmentacao.casual++;
+    });
+
+    // Preparar dados para gráficos
+    const chartData = sortedData.map(item => ({
+      timestamp: `${item.data} ${item.hora}`,
+      depositoMedio: item.depositoMedio || 0,
+      saqueMedio: item.saqueMedio || 0,
+      ticketMedio: item.ticketMedio || 0,
+      ggrMedioJogador: item.ggrMedioJogador || 0,
+      numeroMedioDepositos: item.numeroMedioDepositos || 0,
+      jogadoresUnicos: item.jogadoresUnicos || 0,
+      apostadores: item.apostadores || 0,
+      depositantes: item.depositantes || 0,
+      data: item.data,
+      hora: item.hora
+    }));
+
+    res.json({
+      success: true,
+      data: chartData,
+      stats: stats,
+      segmentacao: segmentacao,
+      count: sortedData.length,
+      message: `${sortedData.length} registros de usuários processados`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Endpoint para visualizar anomalias detectadas
  * Análise de Risco Financeiro - Detecção de Fraudes
  */
