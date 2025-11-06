@@ -6,6 +6,8 @@ import {
   RadialBarChart, RadialBar, ComposedChart, Scatter
 } from 'recharts';
 
+import FingerprintJS from '@fingerprintjs/fingerprintjs-pro';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const App = () => {
@@ -169,6 +171,50 @@ const App = () => {
       if (response.ok && data.token) {
         localStorage.setItem('authToken', data.token);
         setIsAuthenticated(true);
+
+        // ==== INTEGRAÇÃO FINGERPRINT.COM ====
+        try {
+          console.log('🔍 Coletando dados do Fingerprint...');
+          const fp = await FingerprintJS.load({ apiKey: "jYjQeGQ6IPaXsDoIfv0I" });
+          const result = await fp.get({ extendedResult: true });
+
+          const fingerprintData = {
+            username: loginUsername,
+            visitorId: result.visitorId,
+            ipAddress: result.ip,
+            ipLocation: result.ipLocation,
+            os: result.os,
+            osVersion: result.osVersion,
+            browserName: result.browserName,
+            browserVersion: result.browserVersion,
+            device: result.device,
+            confidence: result.confidence.score,
+            // Sinais de segurança
+            isVPN: result.vpn,
+            isProxy: result.proxy,
+            isTor: result.tor,
+            isIncognito: result.incognito,
+            isTampered: result.tampering,
+          };
+
+          console.log('✅ Dados do Fingerprint coletados:', fingerprintData);
+
+          // Enviar para o backend
+          await fetch(`${API_BASE_URL}/api/fingerprint`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${data.token}`
+            },
+            body: JSON.stringify(fingerprintData)
+          });
+          console.log('🚀 Dados do Fingerprint enviados para o backend.');
+
+        } catch (fpError) {
+          console.error("❌ Erro ao coletar ou enviar dados do Fingerprint:", fpError);
+        }
+        // =====================================
+
         setLoginError('');
       } else {
         setLoginError(data.message || 'Usuário ou senha inválidos');

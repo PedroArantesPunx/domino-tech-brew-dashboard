@@ -12,6 +12,7 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@fingerprintjs/fingerprintjs-pro": "^3.12.3",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "lucide-react": "^0.263.1",

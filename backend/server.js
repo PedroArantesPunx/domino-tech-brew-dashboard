@@ -840,6 +840,25 @@ async function fetchSlackMessages() {
 // ==================== ROTAS DA API ====================
 
 /**
+ * Endpoint para receber dados do Fingerprint.com
+ * Protegido por autenticação
+ */
+app.post('/api/fingerprint', authMiddleware, (req, res) => {
+  const fingerprintData = req.body;
+
+  // Adicionar informações do usuário logado (do token) aos dados
+  fingerprintData.authenticatedUser = req.user.username;
+  fingerprintData.receivedAt = new Date().toISOString();
+
+  console.log('🔍 Dados do Fingerprint recebidos:', JSON.stringify(fingerprintData, null, 2));
+
+  // No futuro, podemos salvar estes dados em um arquivo ou banco de dados
+  // Ex: saveFingerprintData(fingerprintData);
+
+  res.status(200).json({ success: true, message: 'Dados recebidos' });
+});
+
+/**
  * Listar todos os canais (para descobrir o CHANNEL_ID)
  */
 app.get('/api/list-channels', async (req, res) => {
