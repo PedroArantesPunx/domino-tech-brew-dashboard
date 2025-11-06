@@ -1810,24 +1810,30 @@ app.get('/api/dashboard-overview', async (req, res) => {
  * Retorna métricas de saldo inicial, final e variação
  */
 app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
+  console.log('🔵 [DEBUG] Endpoint /api/dashboard-saldo iniciado');
   try {
     let allData = [];
 
     // Ler dados existentes
+    console.log('🔵 [DEBUG] Lendo arquivo DATA_FILE...');
     try {
       const fileContent = await fs.readFile(DATA_FILE, 'utf8');
       allData = JSON.parse(fileContent);
+      console.log(`🔵 [DEBUG] Arquivo lido com sucesso: ${allData.length} registros`);
     } catch (error) {
-      console.log('Nenhum dado armazenado ainda');
+      console.log('🔵 [DEBUG] Nenhum dado armazenado ainda');
     }
 
     // Filtrar apenas dados de Time de Risco (que contém saldo)
+    console.log('🔵 [DEBUG] Filtrando dados de Time de Risco...');
     const riscoData = allData.filter(item =>
       item.tipoRelatorio === 'Time de Risco' &&
       (item.saldoInicial !== null || item.saldoFinal !== null)
     );
+    console.log(`🔵 [DEBUG] Registros filtrados: ${riscoData.length}`);
 
     if (riscoData.length === 0) {
+      console.log('🔵 [DEBUG] Nenhum dado de saldo - retornando resposta vazia');
       return res.json({
         success: true,
         data: [],
@@ -1837,13 +1843,16 @@ app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
     }
 
     // Ordenar por data e hora
+    console.log('🔵 [DEBUG] Ordenando dados por data e hora...');
     const sortedData = riscoData.sort((a, b) => {
       const dateA = new Date(`${a.data} ${a.hora}`);
       const dateB = new Date(`${b.data} ${b.hora}`);
       return dateA - dateB;
     });
+    console.log('🔵 [DEBUG] Ordenação concluída');
 
     // Calcular estatísticas
+    console.log('🔵 [DEBUG] Calculando estatísticas...');
     const stats = {
       saldoAtual: sortedData[sortedData.length - 1]?.saldoFinal || 0,
       saldoPrimeiro: sortedData[0]?.saldoInicial || 0,
@@ -1854,8 +1863,10 @@ app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
       totalRegistros: sortedData.length,
       ultimaAtualizacao: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
     };
+    console.log('🔵 [DEBUG] Estatísticas calculadas');
 
     // Preparar dados para gráficos
+    console.log('🔵 [DEBUG] Preparando dados para gráficos...');
     const chartData = sortedData.map(item => ({
       timestamp: `${item.data} ${item.hora}`,
       saldoInicial: item.saldoInicial || 0,
@@ -1864,6 +1875,7 @@ app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
       data: item.data,
       hora: item.hora
     }));
+    console.log('🔵 [DEBUG] Dados preparados, enviando resposta...');
 
     res.json({
       success: true,
@@ -1872,7 +1884,9 @@ app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
       count: sortedData.length,
       message: `${sortedData.length} registros de saldo processados`
     });
+    console.log('🔵 [DEBUG] Resposta enviada com sucesso');
   } catch (error) {
+    console.error('🔴 [DEBUG] ERRO no endpoint dashboard-saldo:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1886,24 +1900,30 @@ app.get('/api/dashboard-saldo', verifyToken, async (req, res) => {
  * Retorna métricas de comportamento financeiro dos usuários
  */
 app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
+  console.log('🟢 [DEBUG] Endpoint /api/dashboard-usuarios iniciado');
   try {
     let allData = [];
 
     // Ler dados existentes
+    console.log('🟢 [DEBUG] Lendo arquivo DATA_FILE...');
     try {
       const fileContent = await fs.readFile(DATA_FILE, 'utf8');
       allData = JSON.parse(fileContent);
+      console.log(`🟢 [DEBUG] Arquivo lido com sucesso: ${allData.length} registros`);
     } catch (error) {
-      console.log('Nenhum dado armazenado ainda');
+      console.log('🟢 [DEBUG] Nenhum dado armazenado ainda');
     }
 
     // Filtrar apenas dados de Time de Risco (que contém métricas de usuários)
+    console.log('🟢 [DEBUG] Filtrando dados de Time de Risco com métricas de usuários...');
     const riscoData = allData.filter(item =>
       item.tipoRelatorio === 'Time de Risco' &&
       (item.depositoMedio || item.ticketMedio || item.ggrMedioJogador)
     );
+    console.log(`🟢 [DEBUG] Registros filtrados: ${riscoData.length}`);
 
     if (riscoData.length === 0) {
+      console.log('🟢 [DEBUG] Nenhum dado de usuários - retornando resposta vazia');
       return res.json({
         success: true,
         data: [],
@@ -1913,17 +1933,21 @@ app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
     }
 
     // Ordenar por data e hora
+    console.log('🟢 [DEBUG] Ordenando dados por data e hora...');
     const sortedData = riscoData.sort((a, b) => {
       const dateA = new Date(`${a.data} ${a.hora}`);
       const dateB = new Date(`${b.data} ${b.hora}`);
       return dateA - dateB;
     });
+    console.log('🟢 [DEBUG] Ordenação concluída');
 
     // Calcular estatísticas agregadas
+    console.log('🟢 [DEBUG] Calculando estatísticas agregadas...');
     const validDepositos = sortedData.filter(item => item.depositoMedio > 0);
     const validSaques = sortedData.filter(item => item.saqueMedio > 0);
     const validTickets = sortedData.filter(item => item.ticketMedio > 0);
     const validGGR = sortedData.filter(item => item.ggrMedioJogador > 0);
+    console.log(`🟢 [DEBUG] Dados válidos - Depositos: ${validDepositos.length}, Saques: ${validSaques.length}, Tickets: ${validTickets.length}, GGR: ${validGGR.length}`);
 
     const stats = {
       depositoMedio: validDepositos.length > 0
@@ -1948,8 +1972,10 @@ app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
       totalRegistros: sortedData.length,
       ultimaAtualizacao: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
     };
+    console.log('🟢 [DEBUG] Estatísticas calculadas');
 
     // Segmentação de usuários por ticket médio (últimos dados disponíveis)
+    console.log('🟢 [DEBUG] Calculando segmentação de usuários...');
     const ultimosDados = sortedData.slice(-50); // Últimos 50 registros
     const segmentacao = {
       baleias: 0, // Ticket > 1000
@@ -1965,8 +1991,10 @@ app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
       else if (ticket >= 100) segmentacao.medioValor++;
       else if (ticket > 0) segmentacao.casual++;
     });
+    console.log('🟢 [DEBUG] Segmentação concluída');
 
     // Preparar dados para gráficos
+    console.log('🟢 [DEBUG] Preparando dados para gráficos...');
     const chartData = sortedData.map(item => ({
       timestamp: `${item.data} ${item.hora}`,
       depositoMedio: item.depositoMedio || 0,
@@ -1980,6 +2008,7 @@ app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
       data: item.data,
       hora: item.hora
     }));
+    console.log('🟢 [DEBUG] Dados preparados, enviando resposta...');
 
     res.json({
       success: true,
@@ -1989,7 +2018,9 @@ app.get('/api/dashboard-usuarios', verifyToken, async (req, res) => {
       count: sortedData.length,
       message: `${sortedData.length} registros de usuários processados`
     });
+    console.log('🟢 [DEBUG] Resposta enviada com sucesso');
   } catch (error) {
+    console.error('🔴 [DEBUG] ERRO no endpoint dashboard-usuarios:', error);
     res.status(500).json({
       success: false,
       error: error.message
