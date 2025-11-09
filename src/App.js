@@ -243,7 +243,10 @@ const App = () => {
           const configData = await configResponse.json();
 
           console.log('🔍 Coletando dados do Fingerprint...');
-          const fp = await FingerprintJS.load({ apiKey: configData.apiKey });
+          const fp = await FingerprintJS.load({
+            apiKey: configData.apiKey,
+            endpoint: 'https://fp.techandbrew.com.br'
+          });
           const result = await fp.get({ extendedResult: true });
 
           const fingerprintData = {
