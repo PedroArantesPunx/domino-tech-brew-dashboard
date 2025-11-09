@@ -1,0 +1,18 @@
+{
+  "admin": {
+    "username": "admin",
+    "passwordHash": "$2a$10$3dDoVFA71A88A16QmpfXCeGeoPWHuLBM71kmI.dDD28Fl9K7j0j66",
+    "role": "admin",
+    "email": "admin@techandbrew.com.br",
+    "createdAt": "2025-11-09T09:36:10.174Z"
+  },
+  "teste_user": {
+    "username": "teste_user",
+    "passwordHash": "$2a$10$.co1cpDTNtkVD2a2lKMFPe8DZUR1gqSGQ2zIM6T5oQo7Y5Nael6MG",
+    "email": "teste@example.com",
+    "fullName": "Usuário de Teste",
+    "role": "user",
+    "createdAt": "2025-11-09T09:36:10.306Z",
+    "isActive": true
+  }
+}
