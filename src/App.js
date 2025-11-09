@@ -75,6 +75,16 @@ const App = () => {
   const [saldoData, setSaldoData] = useState(null);
   const [usuariosData, setUsuariosData] = useState(null);
 
+  // eslint-disable-next-line no-unused-vars
+  const [saldoLoading, setSaldoLoading] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [usuariosLoading, setUsuariosLoading] = useState(false);
+
+  // eslint-disable-next-line no-unused-vars
+  const [saldoError, setSaldoError] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [usuariosError, setUsuariosError] = useState(null);
+
   // ==== ESTADOS PARA CONTROLES AVANÇADOS DE GRÁFICOS ====
   const [chartType, setChartType] = useState('line'); // line, bar, area, candle, scatter
   const [timeAggregation, setTimeAggregation] = useState('original'); // original, minutes, hours, days, weeks, months, years
