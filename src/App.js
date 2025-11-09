@@ -17,6 +17,19 @@ const App = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+
+  // ==== ESTADO DE REGISTRO ====
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerFullName, setRegisterFullName] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  const [registerSuccess, setRegisterSuccess] = useState('');
+  const [registerLoading, setRegisterLoading] = useState(false);
+
+  // ==== DADOS DO USUÁRIO LOGADO ====
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -27,10 +40,16 @@ const App = () => {
 
   const [periodFilter, setPeriodFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
-  const [activeDashboard, setActiveDashboard] = useState('performance'); // performance, risco, overview, anomalias
+  const [activeDashboard, setActiveDashboard] = useState('performance'); // performance, risco, overview, anomalias, fingerprint
   const [anomaliesData, setAnomaliesData] = useState(null);
   const [dataQuality, setDataQuality] = useState(null);
   const [criticalAlerts, setCriticalAlerts] = useState([]);
+
+  // ==== ESTADOS PARA FINGERPRINT ====
+  const [fingerprintData, setFingerprintData] = useState([]);
+  const [fingerprintStats, setFingerprintStats] = useState(null);
+  const [fingerprintLoading, setFingerprintLoading] = useState(false);
+  const [fingerprintError, setFingerprintError] = useState(null);
 
   // ==== ESTADOS PARA DASHBOARDS SEPARADOS ====
   const [performanceData, setPerformanceData] = useState(null);
@@ -127,7 +146,16 @@ const App = () => {
   // ==== VERIFICAR AUTENTICAÇÃO AO CARREGAR ====
   useEffect(() => {
     const token = localStorage.getItem('authToken');
-    if (token) {
+    const userDataStr = localStorage.getItem('currentUser');
+
+    if (token && userDataStr) {
+      try {
+        const userData = JSON.parse(userDataStr);
+        setCurrentUser(userData);
+      } catch (e) {
+        console.error('Erro ao parsear dados do usuário:', e);
+      }
+
       // Verificar se o token é válido
       fetch(`${API_BASE_URL}/api/auth/verify`, {
         headers: {
@@ -140,10 +168,14 @@ const App = () => {
           setIsAuthenticated(true);
         } else {
           localStorage.removeItem('authToken');
+          localStorage.removeItem('currentUser');
+          setCurrentUser(null);
         }
       })
       .catch(() => {
         localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+        setCurrentUser(null);
       });
     }
   }, []);
@@ -170,12 +202,37 @@ const App = () => {
 
       if (response.ok && data.token) {
         localStorage.setItem('authToken', data.token);
+
+        // Armazenar dados do usuário
+        const userData = {
+          username: data.username,
+          email: data.email,
+          fullName: data.fullName,
+          role: data.role
+        };
+        localStorage.setItem('currentUser', JSON.stringify(userData));
+        setCurrentUser(userData);
         setIsAuthenticated(true);
 
         // ==== INTEGRAÇÃO FINGERPRINT.COM ====
         try {
+          console.log('🔍 Obtendo configuração do Fingerprint...');
+
+          // Buscar API Key do backend (seguro - não exposto no código)
+          const configResponse = await fetch(`${API_BASE_URL}/api/fingerprint/config`, {
+            headers: {
+              'Authorization': `Bearer ${data.token}`
+            }
+          });
+
+          if (!configResponse.ok) {
+            throw new Error('Não foi possível obter configuração do Fingerprint');
+          }
+
+          const configData = await configResponse.json();
+
           console.log('🔍 Coletando dados do Fingerprint...');
-          const fp = await FingerprintJS.load({ apiKey: "jYjQeGQ6IPaXsDoIfv0I" });
+          const fp = await FingerprintJS.load({ apiKey: configData.apiKey });
           const result = await fp.get({ extendedResult: true });
 
           const fingerprintData = {
@@ -229,9 +286,61 @@ const App = () => {
   // ==== FUNÇÃO DE LOGOUT ====
   const handleLogout = () => {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('currentUser');
     setIsAuthenticated(false);
+    setCurrentUser(null);
     setLoginUsername('');
     setLoginPassword('');
+  };
+
+  // ==== FUNÇÃO DE REGISTRO ====
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setRegisterError('');
+    setRegisterSuccess('');
+    setRegisterLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: registerUsername,
+          password: registerPassword,
+          email: registerEmail,
+          fullName: registerFullName
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setRegisterSuccess('Cadastro realizado com sucesso! Você já pode fazer login.');
+        console.log('✅ Usuário registrado:', data.user);
+
+        // Limpar campos
+        setRegisterUsername('');
+        setRegisterPassword('');
+        setRegisterEmail('');
+        setRegisterFullName('');
+
+        // Voltar para tela de login após 2 segundos
+        setTimeout(() => {
+          setShowRegister(false);
+          setRegisterSuccess('');
+        }, 2000);
+      } else {
+        setRegisterError(data.message || 'Erro ao realizar cadastro');
+        console.error('❌ Erro no registro:', data.message);
+      }
+    } catch (error) {
+      setRegisterError('Erro ao conectar com o servidor');
+      console.error('❌ Erro na requisição de registro:', error);
+    } finally {
+      setRegisterLoading(false);
+    }
   };
 
   // ==== FUNÇÕES DE MÉDIAS MÓVEIS ====
@@ -435,6 +544,52 @@ const App = () => {
       setDataQuality(result);
     } catch (err) {
       console.error('Erro ao buscar qualidade de dados:', err);
+    }
+  }, []);
+
+  // ==== FUNÇÕES DE FINGERPRINT ====
+  const loadFingerprintData = React.useCallback(async () => {
+    setFingerprintLoading(true);
+    setFingerprintError(null);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/api/fingerprint/data`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Erro ao buscar dados de fingerprint');
+
+      const result = await response.json();
+      if (result.success) {
+        setFingerprintData(result.data || []);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados de fingerprint:', err);
+      setFingerprintError(err.message);
+    } finally {
+      setFingerprintLoading(false);
+    }
+  }, []);
+
+  const loadFingerprintStats = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/api/fingerprint/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) return;
+
+      const result = await response.json();
+      if (result.success) {
+        setFingerprintStats(result.data);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar estatísticas de fingerprint:', err);
     }
   }, []);
 
@@ -1234,7 +1389,8 @@ const App = () => {
               </p>
             </div>
 
-            {/* Formulário */}
+            {/* Formulário - Login ou Registro */}
+            {!showRegister ? (
             <form onSubmit={handleLogin}>
               {/* Campo Usuário */}
               <div style={{ marginBottom: '24px' }}>
@@ -1360,7 +1516,304 @@ const App = () => {
               >
                 {loginLoading ? '⏳ Entrando...' : '🔓 Entrar'}
               </button>
+
+              {/* Botão Criar Conta */}
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowRegister(true)}
+                  style={{
+                    background: 'transparent',
+                    border: `1px solid ${colors.gold}`,
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    color: colors.gold,
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(217, 160, 13, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'transparent';
+                  }}
+                >
+                  📝 Criar Nova Conta
+                </button>
+              </div>
             </form>
+            ) : (
+            /* FORMULÁRIO DE REGISTRO */
+            <form onSubmit={handleRegister}>
+              <h2 style={{
+                textAlign: 'center',
+                color: colors.gold,
+                marginBottom: '24px',
+                fontSize: '22px',
+                fontWeight: '800'
+              }}>
+                Criar Nova Conta
+              </h2>
+
+              {/* Mensagens */}
+              {registerError && (
+                <div style={{
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  background: 'rgba(255, 71, 87, 0.1)',
+                  border: `1px solid ${colors.danger}`,
+                  borderRadius: '12px',
+                  color: colors.danger,
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  textAlign: 'center'
+                }}>
+                  {registerError}
+                </div>
+              )}
+
+              {registerSuccess && (
+                <div style={{
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  background: 'rgba(0, 255, 136, 0.1)',
+                  border: `1px solid ${colors.success}`,
+                  borderRadius: '12px',
+                  color: colors.success,
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  textAlign: 'center'
+                }}>
+                  {registerSuccess}
+                </div>
+              )}
+
+              {/* Nome Completo */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Nome Completo
+                </label>
+                <input
+                  type="text"
+                  value={registerFullName}
+                  onChange={(e) => setRegisterFullName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  required
+                  disabled={registerLoading}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    background: 'rgba(10, 14, 39, 0.6)',
+                    border: '2px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: colors.text.primary,
+                    outline: 'none',
+                    transition: 'all 0.3s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.border = `2px solid ${colors.gold}`}
+                  onBlur={(e) => e.target.style.border = '2px solid rgba(255, 255, 255, 0.1)'}
+                />
+              </div>
+
+              {/* Username */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={registerUsername}
+                  onChange={(e) => setRegisterUsername(e.target.value)}
+                  placeholder="3-20 caracteres (a-z, 0-9, _)"
+                  required
+                  minLength={3}
+                  maxLength={20}
+                  pattern="[a-zA-Z0-9_]+"
+                  disabled={registerLoading}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    background: 'rgba(10, 14, 39, 0.6)',
+                    border: '2px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: colors.text.primary,
+                    outline: 'none',
+                    transition: 'all 0.3s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.border = `2px solid ${colors.gold}`}
+                  onBlur={(e) => e.target.style.border = '2px solid rgba(255, 255, 255, 0.1)'}
+                />
+              </div>
+
+              {/* Email */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  required
+                  disabled={registerLoading}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    background: 'rgba(10, 14, 39, 0.6)',
+                    border: '2px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: colors.text.primary,
+                    outline: 'none',
+                    transition: 'all 0.3s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.border = `2px solid ${colors.gold}`}
+                  onBlur={(e) => e.target.style.border = '2px solid rgba(255, 255, 255, 0.1)'}
+                />
+              </div>
+
+              {/* Senha */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: colors.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Senha
+                </label>
+                <input
+                  type="password"
+                  value={registerPassword}
+                  onChange={(e) => setRegisterPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  required
+                  minLength={6}
+                  disabled={registerLoading}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    background: 'rgba(10, 14, 39, 0.6)',
+                    border: '2px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: colors.text.primary,
+                    outline: 'none',
+                    transition: 'all 0.3s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.border = `2px solid ${colors.gold}`}
+                  onBlur={(e) => e.target.style.border = '2px solid rgba(255, 255, 255, 0.1)'}
+                />
+              </div>
+
+              {/* Botão de Cadastro */}
+              <button
+                type="submit"
+                disabled={registerLoading}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  background: registerLoading ? colors.text.tertiary : colors.gradients.gold,
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: colors.dark.primary,
+                  cursor: registerLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  boxShadow: registerLoading ? 'none' : '0 8px 24px rgba(217, 160, 13, 0.3)',
+                  opacity: registerLoading ? 0.5 : 1,
+                  marginBottom: '12px'
+                }}
+                onMouseEnter={(e) => {
+                  if (!registerLoading) {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 12px 32px rgba(217, 160, 13, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = registerLoading ? 'none' : '0 8px 24px rgba(217, 160, 13, 0.3)';
+                }}
+              >
+                {registerLoading ? '⏳ Cadastrando...' : '✅ Criar Conta'}
+              </button>
+
+              {/* Botão Voltar */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRegister(false);
+                  setRegisterError('');
+                  setRegisterSuccess('');
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'transparent',
+                  border: `1px solid ${colors.text.tertiary}`,
+                  borderRadius: '8px',
+                  color: colors.text.secondary,
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.borderColor = colors.text.secondary;
+                  e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.borderColor = colors.text.tertiary;
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                ← Voltar para Login
+              </button>
+            </form>
+            )}
 
             {/* Informação Adicional */}
             <div style={{
@@ -1373,7 +1826,7 @@ const App = () => {
               fontWeight: '600'
             }}>
               <p style={{ margin: 0 }}>
-                🔒 Acesso restrito
+                🔒 Acesso {showRegister ? 'para novos usuários' : 'restrito'}
               </p>
             </div>
           </div>
@@ -1732,11 +2185,19 @@ const App = () => {
             { id: 'overview', label: '📈 Overview Geral', icon: '📈' },
             { id: 'saldo', label: '💰 Fluxo de Caixa', icon: '💰' },
             { id: 'usuarios', label: '👥 Análise de Usuários', icon: '👥' },
-            { id: 'anomalias', label: '🚨 Anomalias', icon: '🛡️' }
+            { id: 'anomalias', label: '🚨 Anomalias', icon: '🛡️' },
+            { id: 'fingerprint', label: '🔍 Fingerprint', icon: '🔒' }
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveDashboard(tab.id)}
+              onClick={() => {
+                setActiveDashboard(tab.id);
+                // Carregar dados de fingerprint quando a aba for clicada
+                if (tab.id === 'fingerprint') {
+                  loadFingerprintData();
+                  loadFingerprintStats();
+                }
+              }}
               style={{
                 padding: '16px 32px',
                 background: activeDashboard === tab.id
@@ -3967,6 +4428,321 @@ const App = () => {
               </GlassCard>
             </div>
           </>
+        )}
+
+        {/* ==== DASHBOARD FINGERPRINT & SEGURANÇA ==== */}
+        {activeDashboard === 'fingerprint' && (
+          <div style={{ marginTop: '30px' }}>
+            <h2 style={{
+              fontSize: '32px',
+              fontWeight: '900',
+              background: colors.gradients.purple,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '24px',
+              textAlign: 'center',
+              filter: 'drop-shadow(0 0 20px rgba(168, 85, 247, 0.4))'
+            }}>
+              🔍 Segurança & Fingerprint
+            </h2>
+
+            {fingerprintLoading && (
+              <div style={{ textAlign: 'center', padding: '60px', color: colors.text.secondary }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+                <p style={{ fontSize: '16px', fontWeight: '600' }}>Carregando dados de fingerprint...</p>
+              </div>
+            )}
+
+            {fingerprintError && (
+              <GlassCard style={{
+                padding: '24px',
+                marginBottom: '24px',
+                background: 'rgba(255, 71, 87, 0.1)',
+                border: `2px solid ${colors.danger}`
+              }}>
+                <div style={{ color: colors.danger, fontSize: '16px', fontWeight: '700', textAlign: 'center' }}>
+                  ❌ Erro: {fingerprintError}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Estatísticas */}
+            {fingerprintStats && !fingerprintLoading && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '20px',
+                marginBottom: '32px'
+              }}>
+                <GlassCard style={{
+                  padding: '24px',
+                  background: `linear-gradient(135deg, rgba(217, 160, 13, 0.1) 0%, rgba(217, 160, 13, 0.05) 100%)`,
+                  border: `2px solid ${colors.gold}40`
+                }}>
+                  <div style={{ fontSize: '13px', color: colors.text.secondary, marginBottom: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Total de Registros
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: '900', color: colors.gold, marginBottom: '8px' }}>
+                    {fingerprintStats.totalRecords}
+                  </div>
+                  <div style={{ fontSize: '12px', color: colors.text.tertiary }}>
+                    📊 Logins registrados
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{
+                  padding: '24px',
+                  background: `linear-gradient(135deg, rgba(13, 255, 153, 0.1) 0%, rgba(13, 255, 153, 0.05) 100%)`,
+                  border: `2px solid ${colors.lime}40`
+                }}>
+                  <div style={{ fontSize: '13px', color: colors.text.secondary, marginBottom: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Visitantes Únicos
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: '900', color: colors.lime, marginBottom: '8px' }}>
+                    {fingerprintStats.uniqueVisitors}
+                  </div>
+                  <div style={{ fontSize: '12px', color: colors.text.tertiary }}>
+                    👤 Dispositivos diferentes
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{
+                  padding: '24px',
+                  background: `linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(0, 245, 255, 0.05) 100%)`,
+                  border: `2px solid ${colors.cyan}40`
+                }}>
+                  <div style={{ fontSize: '13px', color: colors.text.secondary, marginBottom: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    IPs Únicos
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: '900', color: colors.cyan, marginBottom: '8px' }}>
+                    {fingerprintStats.uniqueIPs}
+                  </div>
+                  <div style={{ fontSize: '12px', color: colors.text.tertiary }}>
+                    🌐 Endereços diferentes
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{
+                  padding: '24px',
+                  background: `linear-gradient(135deg, rgba(255, 71, 87, 0.15) 0%, rgba(255, 71, 87, 0.05) 100%)`,
+                  border: `2px solid ${colors.danger}40`,
+                  boxShadow: fingerprintStats.vpnDetections > 0 ? `0 0 30px ${colors.danger}40` : 'none'
+                }}>
+                  <div style={{ fontSize: '13px', color: colors.text.secondary, marginBottom: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Detecções VPN
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: '900', color: colors.danger, marginBottom: '8px' }}>
+                    {fingerprintStats.vpnDetections}
+                  </div>
+                  <div style={{ fontSize: '12px', color: colors.text.tertiary }}>
+                    🚫 Conexões via VPN
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{
+                  padding: '24px',
+                  background: `linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(251, 191, 36, 0.05) 100%)`,
+                  border: `2px solid ${colors.warning}40`
+                }}>
+                  <div style={{ fontSize: '13px', color: colors.text.secondary, marginBottom: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Detecções Proxy
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: '900', color: colors.warning, marginBottom: '8px' }}>
+                    {fingerprintStats.proxyDetections}
+                  </div>
+                  <div style={{ fontSize: '12px', color: colors.text.tertiary }}>
+                    ⚠️ Conexões via Proxy
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{
+                  padding: '24px',
+                  background: `linear-gradient(135deg, rgba(255, 71, 87, 0.2) 0%, rgba(255, 71, 87, 0.05) 100%)`,
+                  border: `2px solid ${colors.danger}`,
+                  boxShadow: fingerprintStats.torDetections > 0 ? `0 0 30px ${colors.danger}60` : 'none'
+                }}>
+                  <div style={{ fontSize: '13px', color: colors.text.secondary, marginBottom: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Detecções Tor
+                  </div>
+                  <div style={{ fontSize: '36px', fontWeight: '900', color: colors.danger, marginBottom: '8px' }}>
+                    {fingerprintStats.torDetections}
+                  </div>
+                  <div style={{ fontSize: '12px', color: colors.text.tertiary }}>
+                    🧅 Conexões via Tor
+                  </div>
+                </GlassCard>
+              </div>
+            )}
+
+            {/* Tabela de Histórico */}
+            {fingerprintData && fingerprintData.length > 0 && !fingerprintLoading && (
+              <GlassCard style={{ padding: '24px', overflowX: 'auto' }}>
+                <h3 style={{
+                  color: colors.text.primary,
+                  marginBottom: '24px',
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '28px' }}>📋</span>
+                  Histórico de Logins ({fingerprintData.length})
+                </h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    minWidth: '900px'
+                  }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}` }}>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', color: colors.text.secondary, fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Data/Hora
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', color: colors.text.secondary, fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Usuário
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', color: colors.text.secondary, fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          IP
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', color: colors.text.secondary, fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Dispositivo
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', color: colors.text.secondary, fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Navegador
+                        </th>
+                        <th style={{ padding: '16px 12px', textAlign: 'left', color: colors.text.secondary, fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Alertas de Segurança
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fingerprintData.slice().reverse().slice(0, 100).map((record, idx) => (
+                        <tr key={idx} style={{
+                          borderBottom: `1px solid ${darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'}`,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = darkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}>
+                          <td style={{ padding: '14px 12px', color: colors.text.primary, fontSize: '14px', fontWeight: '600' }}>
+                            {new Date(record.receivedAt).toLocaleString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                          </td>
+                          <td style={{ padding: '14px 12px', color: colors.text.primary, fontSize: '14px', fontWeight: '700' }}>
+                            {record.username || record.authenticatedUser}
+                          </td>
+                          <td style={{ padding: '14px 12px', color: colors.cyan, fontSize: '13px', fontFamily: 'monospace', fontWeight: '600' }}>
+                            {record.ipAddress || 'N/A'}
+                          </td>
+                          <td style={{ padding: '14px 12px', color: colors.text.secondary, fontSize: '13px' }}>
+                            {record.os} - {record.device}
+                          </td>
+                          <td style={{ padding: '14px 12px', color: colors.text.secondary, fontSize: '13px' }}>
+                            {record.browserName}
+                          </td>
+                          <td style={{ padding: '14px 12px', fontSize: '14px' }}>
+                            {record.isVPN && (
+                              <span style={{
+                                background: 'rgba(255, 71, 87, 0.2)',
+                                color: colors.danger,
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                marginRight: '6px',
+                                display: 'inline-block',
+                                border: `1px solid ${colors.danger}`
+                              }}>
+                                🚫 VPN
+                              </span>
+                            )}
+                            {record.isProxy && (
+                              <span style={{
+                                background: 'rgba(251, 191, 36, 0.2)',
+                                color: colors.warning,
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                marginRight: '6px',
+                                display: 'inline-block',
+                                border: `1px solid ${colors.warning}`
+                              }}>
+                                ⚠️ Proxy
+                              </span>
+                            )}
+                            {record.isTor && (
+                              <span style={{
+                                background: 'rgba(255, 71, 87, 0.3)',
+                                color: colors.danger,
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                marginRight: '6px',
+                                display: 'inline-block',
+                                border: `2px solid ${colors.danger}`
+                              }}>
+                                🧅 Tor
+                              </span>
+                            )}
+                            {record.isIncognito && (
+                              <span style={{
+                                background: 'rgba(168, 85, 247, 0.2)',
+                                color: colors.purple,
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                marginRight: '6px',
+                                display: 'inline-block',
+                                border: `1px solid ${colors.purple}`
+                              }}>
+                                🕶️ Incógnito
+                              </span>
+                            )}
+                            {!record.isVPN && !record.isProxy && !record.isTor && (
+                              <span style={{
+                                color: colors.success,
+                                fontSize: '14px',
+                                fontWeight: '700'
+                              }}>
+                                ✅ OK
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+            )}
+
+            {fingerprintData && fingerprintData.length === 0 && !fingerprintLoading && (
+              <GlassCard style={{ padding: '60px', textAlign: 'center' }}>
+                <div style={{ fontSize: '64px', marginBottom: '20px', opacity: 0.6 }}>🔍</div>
+                <div style={{ fontSize: '20px', fontWeight: '800', color: colors.text.primary, marginBottom: '12px' }}>
+                  Nenhum dado de fingerprint encontrado
+                </div>
+                <div style={{ fontSize: '15px', color: colors.text.tertiary }}>
+                  Os dados de fingerprint serão coletados automaticamente no próximo login.
+                </div>
+              </GlassCard>
+            )}
+          </div>
         )}
 
         {loading && (

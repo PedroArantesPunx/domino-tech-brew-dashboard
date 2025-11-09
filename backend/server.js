@@ -11,6 +11,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const axios = require('axios');
 
 // ==================== CONFIGURAÇÃO ====================
 
@@ -23,6 +25,9 @@ const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 // ID do canal onde os alertas são enviados
 const CHANNEL_ID = process.env.CHANNEL_ID;
 
+// API Key do Fingerprint.com (mantida segura no backend)
+const FINGERPRINT_API_KEY = process.env.FINGERPRINT_API_KEY;
+
 // Inicializar cliente do Slack
 const slackClient = new WebClient(SLACK_BOT_TOKEN);
 
@@ -32,14 +37,9 @@ app.use(express.json());
 
 // ==================== AUTENTICAÇÃO ====================
 
-// Configuração de usuários (em produção, use banco de dados e hash de senha)
-const USERS = {
-    admin: {
-        username: 'admin',
-        password: process.env.ADMIN_PASSWORD || 'domino2024',  // Altere no .env
-        role: 'admin'
-    }
-};
+// Usuários agora são armazenados em users.json
+// Para criar novos usuários, use o endpoint POST /api/auth/register
+// Para gerar hash de senha manualmente: node utils/generate-password-hash.js "senha"
 
 // Armazenar tokens ativos (em produção, use Redis ou banco de dados)
 const activeSessions = new Map();
@@ -111,7 +111,7 @@ function authMiddleware(req, res, next) {
  * POST /api/auth/login
  * Fazer login e receber token
  */
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
 
     console.log('🔐 Tentativa de login:', username);
@@ -120,10 +120,26 @@ app.post('/api/auth/login', (req, res) => {
         return res.status(400).json({ message: 'Usuário e senha são obrigatórios' });
     }
 
-    const user = USERS[username];
+    // Carregar usuários do arquivo
+    const users = await loadUsers();
+    const user = users[username];
 
-    if (!user || user.password !== password) {
-        console.log('❌ Login falhou:', username);
+    if (!user) {
+        console.log('❌ Login falhou - usuário não encontrado:', username);
+        return res.status(401).json({ message: 'Usuário ou senha inválidos' });
+    }
+
+    // Verificar se usuário está ativo
+    if (user.isActive === false) {
+        console.log('❌ Login falhou - usuário inativo:', username);
+        return res.status(401).json({ message: 'Usuário inativo' });
+    }
+
+    // Comparar senha usando bcrypt (async para segurança)
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+
+    if (!passwordMatch) {
+        console.log('❌ Login falhou - senha incorreta:', username);
         return res.status(401).json({ message: 'Usuário ou senha inválidos' });
     }
 
@@ -131,15 +147,18 @@ app.post('/api/auth/login', (req, res) => {
     const token = generateToken(username);
     activeSessions.set(token, {
         username,
+        role: user.role,
         createdAt: new Date().toISOString()
     });
 
-    console.log('✅ Login bem-sucedido:', username);
+    console.log('✅ Login bem-sucedido:', username, `(${user.role})`);
 
     res.json({
         token,
         username,
-        role: user.role
+        role: user.role,
+        email: user.email,
+        fullName: user.fullName
     });
 });
 
@@ -182,6 +201,75 @@ app.post('/api/auth/logout', authMiddleware, (req, res) => {
     res.json({ message: 'Logout realizado com sucesso' });
 });
 
+/**
+ * POST /api/auth/register
+ * Registrar novo usuário
+ */
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { username, password, email, fullName } = req.body;
+
+        console.log('📝 Tentativa de registro:', username, email);
+
+        const result = await createUser({ username, password, email, fullName });
+
+        if (result.success) {
+            console.log('✅ Registro bem-sucedido:', username);
+            res.status(201).json(result);
+        } else {
+            console.log('❌ Registro falhou:', result.message);
+            res.status(400).json(result);
+        }
+    } catch (error) {
+        console.error('❌ Erro no endpoint de registro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno ao processar registro'
+        });
+    }
+});
+
+/**
+ * GET /api/auth/users
+ * Listar todos os usuários (apenas admin)
+ */
+app.get('/api/auth/users', authMiddleware, async (req, res) => {
+    try {
+        // Verificar se é admin
+        const users = await loadUsers();
+        const requestingUser = users[req.user.username];
+
+        if (requestingUser.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Acesso negado. Apenas administradores podem listar usuários.'
+            });
+        }
+
+        // Retornar lista de usuários (sem as senhas)
+        const userList = Object.values(users).map(u => ({
+            username: u.username,
+            email: u.email,
+            fullName: u.fullName,
+            role: u.role,
+            isActive: u.isActive,
+            createdAt: u.createdAt
+        }));
+
+        res.json({
+            success: true,
+            users: userList,
+            count: userList.length
+        });
+    } catch (error) {
+        console.error('❌ Erro ao listar usuários:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao listar usuários'
+        });
+    }
+});
+
 // Health check endpoint (não requer autenticação)
 app.get('/api/health', (req, res) => {
     res.status(200).json({
@@ -193,8 +281,10 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Arquivo para armazenar os dados
+// Arquivos para armazenar os dados
 const DATA_FILE = path.join(__dirname, 'alertas.json');
+const FINGERPRINT_FILE = path.join(__dirname, 'fingerprintData.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
 
 // ==================== FUNÇÕES AUXILIARES ====================
 
@@ -242,6 +332,249 @@ function parseBrazilianNumber(numStr) {
   }
 
   return isNegative ? -result : result;
+}
+
+/**
+ * Carregar usuários do arquivo
+ * @returns {Promise<Object>} Objeto com usuários
+ */
+async function loadUsers() {
+  try {
+    const fileContent = await fs.readFile(USERS_FILE, 'utf8');
+    return JSON.parse(fileContent);
+  } catch (error) {
+    // Arquivo não existe ainda, retornar usuário admin padrão
+    const defaultAdmin = {
+      admin: {
+        username: 'admin',
+        passwordHash: process.env.ADMIN_PASSWORD_HASH || '$2a$10$3dDoVFA71A88A16QmpfXCeGeoPWHuLBM71kmI.dDD28Fl9K7j0j66',
+        role: 'admin',
+        email: 'admin@techandbrew.com.br',
+        createdAt: new Date().toISOString()
+      }
+    };
+
+    // Criar arquivo com admin padrão
+    await saveUsers(defaultAdmin);
+    return defaultAdmin;
+  }
+}
+
+/**
+ * Salvar usuários no arquivo
+ * @param {Object} users - Objeto com todos os usuários
+ * @returns {Promise<boolean>} true se salvo com sucesso
+ */
+async function saveUsers(users) {
+  try {
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao salvar usuários:', error);
+    return false;
+  }
+}
+
+/**
+ * Criar novo usuário
+ * @param {Object} userData - Dados do usuário (username, password, email, etc)
+ * @returns {Promise<Object>} Resultado da operação
+ */
+async function createUser(userData) {
+  try {
+    const { username, password, email, fullName } = userData;
+
+    // Validações
+    if (!username || !password || !email) {
+      return { success: false, message: 'Campos obrigatórios: username, password, email' };
+    }
+
+    // Validar formato de username (alfanumérico, 3-20 caracteres)
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      return {
+        success: false,
+        message: 'Username deve ter 3-20 caracteres alfanuméricos (a-z, 0-9, _)'
+      };
+    }
+
+    // Validar formato de email
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { success: false, message: 'Email inválido' };
+    }
+
+    // Validar senha (mínimo 6 caracteres)
+    if (password.length < 6) {
+      return { success: false, message: 'Senha deve ter no mínimo 6 caracteres' };
+    }
+
+    // Carregar usuários existentes
+    const users = await loadUsers();
+
+    // Verificar se username já existe
+    if (users[username]) {
+      return { success: false, message: 'Username já existe' };
+    }
+
+    // Verificar se email já existe
+    const emailExists = Object.values(users).some(u => u.email === email);
+    if (emailExists) {
+      return { success: false, message: 'Email já cadastrado' };
+    }
+
+    // Gerar hash da senha
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Criar novo usuário
+    users[username] = {
+      username,
+      passwordHash,
+      email,
+      fullName: fullName || username,
+      role: 'user', // Usuários novos são 'user', não 'admin'
+      createdAt: new Date().toISOString(),
+      isActive: true
+    };
+
+    // Salvar
+    const saved = await saveUsers(users);
+
+    if (saved) {
+      console.log(`✅ Novo usuário criado: ${username} (${email})`);
+      return {
+        success: true,
+        message: 'Usuário criado com sucesso',
+        user: {
+          username,
+          email,
+          fullName: users[username].fullName,
+          role: users[username].role
+        }
+      };
+    } else {
+      return { success: false, message: 'Erro ao salvar usuário' };
+    }
+  } catch (error) {
+    console.error('❌ Erro ao criar usuário:', error);
+    return { success: false, message: 'Erro interno ao criar usuário' };
+  }
+}
+
+/**
+ * Carregar dados de fingerprint do arquivo
+ * @returns {Promise<Array>} Array de dados de fingerprint
+ */
+async function loadFingerprintData() {
+  try {
+    const fileContent = await fs.readFile(FINGERPRINT_FILE, 'utf8');
+    return JSON.parse(fileContent);
+  } catch (error) {
+    // Arquivo não existe ainda, retornar array vazio
+    return [];
+  }
+}
+
+/**
+ * Salvar dados de fingerprint no arquivo
+ * @param {Object} newData - Novo registro de fingerprint
+ * @returns {Promise<boolean>} true se salvo com sucesso
+ */
+async function saveFingerprintData(newData) {
+  try {
+    // Carregar dados existentes
+    const allData = await loadFingerprintData();
+
+    // Adicionar timestamp se não existir
+    if (!newData.receivedAt) {
+      newData.receivedAt = new Date().toISOString();
+    }
+
+    // Adicionar novo registro
+    allData.push(newData);
+
+    // Salvar no arquivo
+    await fs.writeFile(FINGERPRINT_FILE, JSON.stringify(allData, null, 2));
+    console.log('✅ Dados de fingerprint salvos com sucesso!');
+
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao salvar dados de fingerprint:', error);
+    return false;
+  }
+}
+
+/**
+ * Obter estatísticas de fingerprint
+ * @returns {Promise<Object>} Estatísticas agregadas
+ */
+async function getFingerprintStats() {
+  try {
+    const allData = await loadFingerprintData();
+
+    if (allData.length === 0) {
+      return {
+        totalRecords: 0,
+        uniqueVisitors: 0,
+        uniqueIPs: 0,
+        vpnDetections: 0,
+        proxyDetections: 0,
+        torDetections: 0,
+        incognitoDetections: 0,
+        tamperingDetections: 0,
+        lastUpdate: null
+      };
+    }
+
+    const uniqueVisitors = new Set(allData.map(d => d.visitorId)).size;
+    const uniqueIPs = new Set(allData.map(d => d.ipAddress).filter(Boolean)).size;
+    const vpnDetections = allData.filter(d => d.isVPN).length;
+    const proxyDetections = allData.filter(d => d.isProxy).length;
+    const torDetections = allData.filter(d => d.isTor).length;
+    const incognitoDetections = allData.filter(d => d.isIncognito).length;
+    const tamperingDetections = allData.filter(d => d.isTampered).length;
+
+    // Agrupar por usuário
+    const userStats = {};
+    allData.forEach(record => {
+      const user = record.username || record.authenticatedUser || 'unknown';
+      if (!userStats[user]) {
+        userStats[user] = {
+          totalLogins: 0,
+          uniqueDevices: new Set(),
+          uniqueIPs: new Set(),
+          suspiciousActivity: 0
+        };
+      }
+
+      userStats[user].totalLogins++;
+      userStats[user].uniqueDevices.add(record.visitorId);
+      if (record.ipAddress) userStats[user].uniqueIPs.add(record.ipAddress);
+      if (record.isVPN || record.isProxy || record.isTor || record.isTampered) {
+        userStats[user].suspiciousActivity++;
+      }
+    });
+
+    // Converter Sets para contagens
+    Object.keys(userStats).forEach(user => {
+      userStats[user].uniqueDevices = userStats[user].uniqueDevices.size;
+      userStats[user].uniqueIPs = userStats[user].uniqueIPs.size;
+    });
+
+    return {
+      totalRecords: allData.length,
+      uniqueVisitors,
+      uniqueIPs,
+      vpnDetections,
+      proxyDetections,
+      torDetections,
+      incognitoDetections,
+      tamperingDetections,
+      userStats,
+      lastUpdate: allData[allData.length - 1].receivedAt
+    };
+  } catch (error) {
+    console.error('❌ Erro ao obter estatísticas de fingerprint:', error);
+    return null;
+  }
 }
 
 /**
@@ -843,7 +1176,7 @@ async function fetchSlackMessages() {
  * Endpoint para receber dados do Fingerprint.com
  * Protegido por autenticação
  */
-app.post('/api/fingerprint', authMiddleware, (req, res) => {
+app.post('/api/fingerprint', authMiddleware, async (req, res) => {
   const fingerprintData = req.body;
 
   // Adicionar informações do usuário logado (do token) aos dados
@@ -852,10 +1185,63 @@ app.post('/api/fingerprint', authMiddleware, (req, res) => {
 
   console.log('🔍 Dados do Fingerprint recebidos:', JSON.stringify(fingerprintData, null, 2));
 
-  // No futuro, podemos salvar estes dados em um arquivo ou banco de dados
-  // Ex: saveFingerprintData(fingerprintData);
+  // Salvar dados no arquivo
+  const saved = await saveFingerprintData(fingerprintData);
 
-  res.status(200).json({ success: true, message: 'Dados recebidos' });
+  if (saved) {
+    res.status(200).json({ success: true, message: 'Dados recebidos e salvos com sucesso' });
+  } else {
+    res.status(500).json({ success: false, message: 'Erro ao salvar dados' });
+  }
+});
+
+/**
+ * Endpoint para obter estatísticas de fingerprint
+ * Protegido por autenticação
+ */
+app.get('/api/fingerprint/stats', authMiddleware, async (req, res) => {
+  try {
+    const stats = await getFingerprintStats();
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error('❌ Erro ao obter estatísticas:', error);
+    res.status(500).json({ success: false, message: 'Erro ao obter estatísticas' });
+  }
+});
+
+/**
+ * Endpoint para obter todos os dados de fingerprint
+ * Protegido por autenticação
+ */
+app.get('/api/fingerprint/data', authMiddleware, async (req, res) => {
+  try {
+    const data = await loadFingerprintData();
+    res.json({ success: true, data, count: data.length });
+  } catch (error) {
+    console.error('❌ Erro ao carregar dados de fingerprint:', error);
+    res.status(500).json({ success: false, message: 'Erro ao carregar dados' });
+  }
+});
+
+/**
+ * Endpoint para obter configuração do Fingerprint (API Key protegida)
+ * Retorna a API key apenas para usuários autenticados
+ * IMPORTANTE: Idealmente, este endpoint deveria fazer a chamada ao Fingerprint.com
+ * diretamente no backend, mas por limitações da biblioteca do Fingerprint (client-side only),
+ * retornamos a API key de forma segura apenas para usuários autenticados.
+ */
+app.get('/api/fingerprint/config', authMiddleware, (req, res) => {
+  if (!FINGERPRINT_API_KEY) {
+    return res.status(500).json({
+      success: false,
+      message: 'API Key do Fingerprint não configurada no servidor'
+    });
+  }
+
+  res.json({
+    success: true,
+    apiKey: FINGERPRINT_API_KEY
+  });
 });
 
 /**
@@ -2597,4 +2983,4 @@ OUTROS:
 });
 // Triggering pipeline again to test new Docker Hub token
 // GitHub Actions test - qui 06 nov 2025 00:49:13 -03
-# Trigger deploy
+// Trigger deploy

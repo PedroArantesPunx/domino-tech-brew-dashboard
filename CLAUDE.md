@@ -20,14 +20,15 @@ Slack Channel → Backend Parser → Validation → alertas.json → API Aggrega
 
 ### Key Components
 
-**Backend** (`backend/server.js` - 2,355 lines)
-- Express API with 25+ endpoints
-- JWT authentication with hardcoded credentials (USERS object in server.js:36-41)
+**Backend** (`backend/server.js` - 2,788 lines)
+- Express API with 28+ endpoints
+- **SECURE:** JWT authentication with bcrypt password hashing (USERS object in server.js:43-50)
+- **SECURE:** Fingerprint.com integration for fraud detection
 - Slack Web API integration (@slack/web-api)
 - Two message parsers: "Relatório de Performance de Produtos" and "Relatório Time de Risco"
 - Hourly data aggregation via `aggregateDataByHour()` function
 - **Critical:** All timestamps use America/Sao_Paulo timezone (UTC-3)
-- Persistent storage: `alertas.json` (volume-mounted)
+- Persistent storage: `alertas.json` + `fingerprintData.json` (volume-mounted)
 
 **Frontend** (`src/App.js` - 3,526 lines)
 - Single-page React app with 4 dashboard views: Performance, Risco, Overview, Anomalias
@@ -44,6 +45,97 @@ Slack Channel → Backend Parser → Validation → alertas.json → API Aggrega
 - Health checks: `/api/health` (backend), `http://localhost` (frontend)
 - Docker Compose orchestration with `dashboard-network` bridge
 - CI/CD: GitHub Actions deploy frontend to Vercel on push to main
+
+## Security Features (Implemented Nov 2025)
+
+### Password Security with bcrypt
+**Status:** ✅ Implemented
+**Location:** `backend/server.js:118-156`
+
+- All passwords now stored as bcrypt hashes (salt rounds: 10)
+- Default password: `domino2024` (hash stored in USERS object)
+- **IMPORTANT:** Never store plaintext passwords
+- Password hash stored in environment variable: `ADMIN_PASSWORD_HASH`
+
+**Generate new password hash:**
+```bash
+node backend/utils/generate-password-hash.js "sua_senha_aqui"
+```
+
+**Update password:**
+1. Generate hash using script above
+2. Update `backend/.env`: `ADMIN_PASSWORD_HASH="$2a$10$..."`
+3. Restart backend: `docker compose restart backend`
+
+### Fingerprint.com Fraud Detection
+**Status:** ✅ Implemented
+**API Key Location:** Environment variable (not exposed in frontend code)
+
+**Features:**
+- Device fingerprinting on login
+- VPN/Proxy/Tor detection
+- Incognito mode detection
+- Tampering detection
+- Persistent storage in `fingerprintData.json`
+- Statistics endpoint: `/api/fingerprint/stats`
+
+**Data Collected:**
+- Visitor ID (unique device identifier)
+- IP address and geolocation
+- OS, browser, device information
+- Confidence score
+- Security signals (VPN, proxy, Tor, incognito, tampering)
+
+**New Backend Endpoints:**
+- `GET /api/fingerprint/config` (auth required) - Get API key securely
+- `POST /api/fingerprint` (auth required) - Save fingerprint data
+- `GET /api/fingerprint/stats` (auth required) - Get fraud statistics
+- `GET /api/fingerprint/data` (auth required) - Get all fingerprint records
+
+**Frontend Integration:**
+- API key fetched from backend (not hardcoded)
+- Automatic fingerprint collection on successful login
+- Data sent to backend for storage and analysis
+
+### Data Storage
+**Files:**
+- `backend/alertas.json` - Financial data (33K+ records)
+- `backend/fingerprintData.json` - Fingerprint/fraud data
+- Both files are volume-mounted for persistence
+
+**Fingerprint Data Structure:**
+```json
+{
+  "username": "admin",
+  "authenticatedUser": "admin",
+  "visitorId": "xxx",
+  "ipAddress": "x.x.x.x",
+  "ipLocation": {...},
+  "os": "Linux",
+  "browserName": "Chrome",
+  "isVPN": false,
+  "isProxy": false,
+  "isTor": false,
+  "isIncognito": false,
+  "isTampered": false,
+  "confidence": 0.99,
+  "receivedAt": "2025-11-09T..."
+}
+```
+
+### Environment Variables (Security)
+**Required in `backend/.env`:**
+```bash
+# Authentication
+ADMIN_PASSWORD_HASH=$2a$10$3dDoVFA71A88A16QmpfXCeGeoPWHuLBM71kmI.dDD28Fl9K7j0j66
+
+# Fingerprint.com
+FINGERPRINT_API_KEY=jYjQeGQ6IPaXsDoIfv0I
+```
+
+**Dependencies Added:**
+- `bcryptjs@^2.4.3` - Password hashing
+- `axios@^1.6.0` - HTTP client (for future proxy features)
 
 ## Common Commands
 
@@ -278,10 +370,12 @@ test-browser.js         # Puppeteer validation (MUST pass)
 5. Sessions tracked in `activeSessions` Map
 
 **Security Notes:**
-- Credentials hardcoded in server.js (not production-ready)
-- No password hashing (plain text comparison)
+- ✅ **SECURE:** Passwords hashed with bcrypt (salt rounds: 10)
+- ✅ **SECURE:** API keys stored in environment variables
+- ✅ **SECURE:** Fingerprint.com fraud detection enabled
 - Token expiration: 24 hours
-- To add users: modify USERS object in server.js
+- To add users: modify USERS object in server.js with password hash
+- To change password: Use `node backend/utils/generate-password-hash.js "new_password"`
 
 ## API Endpoints (Key)
 
@@ -296,6 +390,10 @@ test-browser.js         # Puppeteer validation (MUST pass)
 | GET | `/api/coverage-analysis` | Data quality metrics | Yes |
 | POST | `/api/test-parser` | Test parser with custom message | Yes |
 | DELETE | `/api/data` | Clear all data | Yes |
+| **GET** | **`/api/fingerprint/config`** | **Get Fingerprint API key (secure)** | **Yes** |
+| **POST** | **`/api/fingerprint`** | **Save fingerprint data** | **Yes** |
+| **GET** | **`/api/fingerprint/stats`** | **Get fraud detection statistics** | **Yes** |
+| **GET** | **`/api/fingerprint/data`** | **Get all fingerprint records** | **Yes** |
 
 ## Environment Variables
 
@@ -305,6 +403,10 @@ SLACK_BOT_TOKEN=xoxb-...     # Bot token with channels:history, channels:read
 CHANNEL_ID=C09LD4K2GAH       # Slack channel ID
 PORT=3001                    # Backend port
 NODE_ENV=production          # Environment
+
+# Security (NEW - Nov 2025)
+ADMIN_PASSWORD_HASH=$2a$10$...  # bcrypt hash (use generate-password-hash.js)
+FINGERPRINT_API_KEY=...         # Fingerprint.com API key
 ```
 
 **Vercel** (Dashboard → Settings → Environment Variables):
@@ -356,15 +458,18 @@ NODE_ENV=production          # Environment
 ## Prohibited Operations
 
 - ❌ Modify code without backup
-- ❌ Commit `.env` files with tokens or hardcoded passwords
+- ❌ Commit `.env` files with tokens, API keys, or password hashes
+- ❌ **Store plaintext passwords (always use bcrypt hashes)**
+- ❌ **Hardcode API keys in frontend code**
 - ❌ Create inline arrays/objects in JSX (React Error #31)
 - ❌ Remove `useCallback`/`useMemo` from App.js
 - ❌ Change timezone without updating all references
 - ❌ Modify `aggregateDataByHour()` without validation
-- ❌ Delete production `alertas.json` without backup
+- ❌ Delete production `alertas.json` or `fingerprintData.json` without backup
 - ❌ Deploy without running `test-browser.js`
-- ❌ Modify USERS object without understanding auth implications
+- ❌ Modify USERS object without bcrypt password hashes
 - ❌ Deploy Vercel with incorrect backend IP in vercel.json
+- ❌ **Disable security features (bcrypt, fingerprinting) without authorization**
 
 ## Important Metrics
 
