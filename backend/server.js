@@ -328,15 +328,10 @@ function parseBrazilianNumber(numStr) {
     // Formato: "1234,56" -> 1234.56
     result = parseFloat(numStr.replace(',', '.'));
   } else if (hasDot) {
-    // Pode ser "1.234" (mil) ou "123.45" (decimal)
-    const parts = numStr.split('.');
-    if (parts.length === 2 && parts[1].length <= 2) {
-      // "123.45" - já está no formato correto
-      result = parseFloat(numStr);
-    } else {
-      // "1.234" - remover ponto
-      result = parseFloat(numStr.replace(/\./g, ''));
-    }
+    // Em formato brasileiro, ponto (.) é SEMPRE separador de milhares
+    // "1.234" -> 1234, "338.11" -> 33811, "49.329" -> 49329
+    // Se fosse decimal, estaria escrito com vírgula: "338,11"
+    result = parseFloat(numStr.replace(/\./g, ''));
   } else {
     result = parseFloat(numStr);
   }
