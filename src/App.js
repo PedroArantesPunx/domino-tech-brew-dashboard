@@ -54,11 +54,22 @@ const App = () => {
   // ==== ESTADOS PARA DASHBOARDS SEPARADOS ====
   const [performanceData, setPerformanceData] = useState(null);
   const [riscoData, setRiscoData] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [overviewData, setOverviewData] = useState(null);
 
   // eslint-disable-next-line no-unused-vars
   const [performanceLoading, setPerformanceLoading] = useState(false);
   // eslint-disable-next-line no-unused-vars
+  const [riscoLoading, setRiscoLoading] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  // eslint-disable-next-line no-unused-vars
   const [performanceError, setPerformanceError] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [riscoError, setRiscoError] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [overviewError, setOverviewError] = useState(null);
 
   // ==== ESTADOS PARA NOVOS DASHBOARDS (Saldo e Usuários) ====
   const [saldoData, setSaldoData] = useState(null);
