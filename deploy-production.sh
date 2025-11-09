@@ -1,5 +1,5 @@
-#!/bin/bash
-# Script de deploy automático para produção
+#!/bin/sh
+# Script de deploy automático para produção (Alpine Linux compatível)
 # Faz pull da imagem mais recente do Docker Hub e reinicia os containers
 
 set -e
