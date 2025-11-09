@@ -280,10 +280,21 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Arquivos para armazenar os dados
-const DATA_FILE = path.join(__dirname, 'alertas.json');
-const FINGERPRINT_FILE = path.join(__dirname, 'fingerprintData.json');
-const USERS_FILE = path.join(__dirname, 'users.json');
+// Arquivos para armazenar os dados (agora em /app/data para persistência via volume)
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'alertas.json');
+const FINGERPRINT_FILE = path.join(DATA_DIR, 'fingerprintData.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+
+// Criar diretório de dados se não existir
+(async () => {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    console.log(`✅ Diretório de dados: ${DATA_DIR}`);
+  } catch (error) {
+    console.error('❌ Erro ao criar diretório de dados:', error);
+  }
+})();
 
 // ==================== FUNÇÕES AUXILIARES ====================
 
