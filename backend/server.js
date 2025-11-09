@@ -3,7 +3,6 @@
 // Backend Node.js para integração com Slack
 // ========================================
 
-// teste GitHub Actions  EXCLUIR QUANDO VIR NOVAMENTE
 require('dotenv').config();
 const express = require('express');
 const { WebClient } = require('@slack/web-api');
