@@ -28,6 +28,9 @@ const App = () => {
   const [registerSuccess, setRegisterSuccess] = useState('');
   const [registerLoading, setRegisterLoading] = useState(false);
 
+  // eslint-disable-next-line no-unused-vars
+  const [currentUser, setCurrentUser] = useState(null);
+
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -51,6 +54,11 @@ const App = () => {
   // ==== ESTADOS PARA DASHBOARDS SEPARADOS ====
   const [performanceData, setPerformanceData] = useState(null);
   const [riscoData, setRiscoData] = useState(null);
+
+  // eslint-disable-next-line no-unused-vars
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [performanceError, setPerformanceError] = useState(null);
 
   // ==== ESTADOS PARA NOVOS DASHBOARDS (Saldo e Usuários) ====
   const [saldoData, setSaldoData] = useState(null);
