@@ -28,9 +28,6 @@ const App = () => {
   const [registerSuccess, setRegisterSuccess] = useState('');
   const [registerLoading, setRegisterLoading] = useState(false);
 
-  // ==== DADOS DO USUÁRIO LOGADO ====
-  const [currentUser, setCurrentUser] = useState(null);
-
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -54,25 +51,10 @@ const App = () => {
   // ==== ESTADOS PARA DASHBOARDS SEPARADOS ====
   const [performanceData, setPerformanceData] = useState(null);
   const [riscoData, setRiscoData] = useState(null);
-  const [overviewData, setOverviewData] = useState(null);
-
-  const [performanceLoading, setPerformanceLoading] = useState(false);
-  const [riscoLoading, setRiscoLoading] = useState(false);
-  const [overviewLoading, setOverviewLoading] = useState(false);
-
-  const [performanceError, setPerformanceError] = useState(null);
-  const [riscoError, setRiscoError] = useState(null);
-  const [overviewError, setOverviewError] = useState(null);
 
   // ==== ESTADOS PARA NOVOS DASHBOARDS (Saldo e Usuários) ====
   const [saldoData, setSaldoData] = useState(null);
   const [usuariosData, setUsuariosData] = useState(null);
-
-  const [saldoLoading, setSaldoLoading] = useState(false);
-  const [usuariosLoading, setUsuariosLoading] = useState(false);
-
-  const [saldoError, setSaldoError] = useState(null);
-  const [usuariosError, setUsuariosError] = useState(null);
 
   // ==== ESTADOS PARA CONTROLES AVANÇADOS DE GRÁFICOS ====
   const [chartType, setChartType] = useState('line'); // line, bar, area, candle, scatter
