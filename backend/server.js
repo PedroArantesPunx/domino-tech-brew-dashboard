@@ -322,16 +322,26 @@ function parseBrazilianNumber(numStr) {
   let result;
 
   if (hasComma && hasDot) {
-    // Formato: "1.234,56" -> 1234.56
-    result = parseFloat(numStr.replace(/\./g, '').replace(',', '.'));
+    // Detectar qual é o separador decimal (sempre o último separador)
+    const lastComma = numStr.lastIndexOf(',');
+    const lastDot = numStr.lastIndexOf('.');
+
+    if (lastDot > lastComma) {
+      // Formato americano: vírgula=milhares, ponto=decimal
+      // "3,130,392.45" -> "3130392.45"
+      result = parseFloat(numStr.replace(/,/g, ''));
+    } else {
+      // Formato brasileiro: ponto=milhares, vírgula=decimal
+      // "3.130.392,45" -> "3130392.45"
+      result = parseFloat(numStr.replace(/\./g, '').replace(',', '.'));
+    }
   } else if (hasComma) {
     // Formato: "1234,56" -> 1234.56
     result = parseFloat(numStr.replace(',', '.'));
   } else if (hasDot) {
-    // Em formato brasileiro, ponto (.) é SEMPRE separador de milhares
-    // "1.234" -> 1234, "338.11" -> 33811, "49.329" -> 49329
-    // Se fosse decimal, estaria escrito com vírgula: "338,11"
-    result = parseFloat(numStr.replace(/\./g, ''));
+    // Apenas pontos, assumir decimal americano
+    // "1234.56" -> 1234.56
+    result = parseFloat(numStr);
   } else {
     result = parseFloat(numStr);
   }
