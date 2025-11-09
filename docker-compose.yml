@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Backend API - Node.js + Slack Integration
   backend:
-    image: dashboard-backend-new
+    image: pedropunx/domino-tech-backend:latest
     container_name: dashboard-backend
     restart: unless-stopped
     env_file:
@@ -13,7 +13,7 @@ services:
     networks:
       - dashboard-network
     volumes:
-      - backend-data:/app
+      - backend-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
       interval: 30s
