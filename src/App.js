@@ -904,20 +904,45 @@ const App = () => {
       perfData = perfData.slice(-100);
     }
 
-    // Calcular totais agregados do período filtrado para Cassino
-    const totalCassinoTurnover = perfData.reduce((sum, item) => sum + (item.cassinoTurnover || 0), 0);
-    const totalCassinoGGR = perfData.reduce((sum, item) => sum + (item.cassinoGGR || 0), 0);
-    const totalCassinoNGR = perfData.reduce((sum, item) => sum + (item.cassinoNGR || 0), 0);
+    // IMPORTANTE: Os relatórios de Performance de Produtos contêm valores CUMULATIVOS (day-to-date)
+    // Não podemos somar esses valores, pois causaria duplicação
+    // Para cada data única, pegamos apenas o último (maior) valor registrado
+
+    // Agrupar por data e pegar último valor de cada dia
+    const perfDataByDate = {};
+    perfData.forEach(item => {
+      const dateKey = item.data;
+      if (!perfDataByDate[dateKey]) {
+        perfDataByDate[dateKey] = item;
+      } else {
+        // Comparar timestamps e manter o mais recente
+        const existingTime = new Date(perfDataByDate[dateKey].timestamp || perfDataByDate[dateKey].hora).getTime();
+        const newTime = new Date(item.timestamp || item.hora).getTime();
+        if (newTime > existingTime) {
+          perfDataByDate[dateKey] = item;
+        }
+      }
+    });
+
+    // Converter de volta para array com apenas últimos valores de cada dia
+    const perfDataLastPerDay = Object.values(perfDataByDate);
+
+    // Calcular totais agregados do período filtrado
+    // Para múltiplos dias, somamos os valores finais de cada dia
+    // Para um único dia, pegamos o valor mais recente
+    const totalCassinoTurnover = perfDataLastPerDay.reduce((sum, item) => sum + (item.cassinoTurnover || 0), 0);
+    const totalCassinoGGR = perfDataLastPerDay.reduce((sum, item) => sum + (item.cassinoGGR || 0), 0);
+    const totalCassinoNGR = perfDataLastPerDay.reduce((sum, item) => sum + (item.cassinoNGR || 0), 0);
 
     // Calcular totais agregados do período filtrado para Sportsbook
-    const totalSportsbookTurnover = perfData.reduce((sum, item) => sum + (item.sportsbookTurnover || 0), 0);
-    const totalSportsbookGGR = perfData.reduce((sum, item) => sum + (item.sportsbookGGR || 0), 0);
-    const totalSportsbookNGR = perfData.reduce((sum, item) => sum + (item.sportsbookNGR || 0), 0);
+    const totalSportsbookTurnover = perfDataLastPerDay.reduce((sum, item) => sum + (item.sportsbookTurnover || 0), 0);
+    const totalSportsbookGGR = perfDataLastPerDay.reduce((sum, item) => sum + (item.sportsbookGGR || 0), 0);
+    const totalSportsbookNGR = perfDataLastPerDay.reduce((sum, item) => sum + (item.sportsbookNGR || 0), 0);
 
     // Calcular totais gerais
-    const totalTurnover = perfData.reduce((sum, item) => sum + (item.turnoverTotal || 0), 0);
-    const totalGGR = perfData.reduce((sum, item) => sum + (item.ggr || 0), 0);
-    const totalNGR = perfData.reduce((sum, item) => sum + (item.ngr || 0), 0);
+    const totalTurnover = perfDataLastPerDay.reduce((sum, item) => sum + (item.turnoverTotal || 0), 0);
+    const totalGGR = perfDataLastPerDay.reduce((sum, item) => sum + (item.ggr || 0), 0);
+    const totalNGR = perfDataLastPerDay.reduce((sum, item) => sum + (item.ngr || 0), 0);
 
     // Calcular percentuais (baseado em GGR)
     const ggrTotal = totalCassinoGGR + totalSportsbookGGR;
@@ -940,7 +965,8 @@ const App = () => {
         ggr: totalGGR,
         ngr: totalNGR
       },
-      count: perfData.length
+      count: perfDataLastPerDay.length, // Número de dias únicos analisados
+      rawData: perfDataLastPerDay // Para uso em gráficos futuros
     };
   }, [performanceData, periodFilter]);
 
@@ -3504,7 +3530,7 @@ const App = () => {
                 alignItems: 'center',
                 gap: '8px'
               }}>
-                📊 {produtosData.count} períodos analisados
+                📊 {produtosData.count} {produtosData.count === 1 ? 'dia analisado' : 'dias analisados'}
               </div>
               <div style={{
                 padding: '8px 16px',
@@ -3518,7 +3544,7 @@ const App = () => {
                 alignItems: 'center',
                 gap: '8px'
               }}>
-                ⏱️ Intervalo: 15 minutos
+                ⏱️ Valores finais de cada dia
               </div>
               {performanceData?.stats?.ultimaAtualizacao && (
                 <div style={{
@@ -3538,97 +3564,47 @@ const App = () => {
               )}
             </div>
 
-            {/* ==== TOTAIS ACUMULADOS E VARIAÇÃO ==== */}
-            {performanceData?.stats && (
-              <>
-                <h3 style={{
-                  fontSize: '20px',
-                  fontWeight: '800',
-                  background: colors.gradients.gold,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  marginBottom: '16px',
-                  textAlign: 'center'
-                }}>
-                  📊 Totais Acumulados do Período
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-                  <StatCard
-                    title="🎰 Casino - Total GGR"
-                    value={formatCurrency(performanceData.stats.totals?.cassinoGGR || 0)}
-                    icon="💰"
-                    gradient={colors.gradients.gold}
-                  />
-                  <StatCard
-                    title="🎰 Casino - Total NGR"
-                    value={formatCurrency(performanceData.stats.totals?.cassinoNGR || 0)}
-                    icon="💎"
-                    gradient={colors.gradients.lime}
-                  />
-                  <StatCard
-                    title="⚽ Sportsbook - Total GGR"
-                    value={formatCurrency(performanceData.stats.totals?.sportsbookGGR || 0)}
-                    icon="💰"
-                    gradient={colors.gradients.purple}
-                  />
-                  <StatCard
-                    title="⚽ Sportsbook - Total NGR"
-                    value={formatCurrency(performanceData.stats.totals?.sportsbookNGR || 0)}
-                    icon="💎"
-                    gradient={colors.gradients.blueGreen}
-                  />
-                </div>
-
-                {/* Variação do Último Período */}
-                {performanceData.stats.diff && (
-                  <>
-                    <h3 style={{
-                      fontSize: '20px',
-                      fontWeight: '800',
-                      background: colors.gradients.blueGreen,
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                      marginBottom: '16px',
-                      textAlign: 'center'
-                    }}>
-                      📈 Variação do Último Período (Δ)
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '48px' }}>
-                      <StatCard
-                        title="🎰 Casino - Δ GGR"
-                        value={formatCurrency(Math.abs(performanceData.stats.diff.casino?.ggr || 0))}
-                        icon={performanceData.stats.diff.casino?.ggr >= 0 ? '📈' : '📉'}
-                        gradient={performanceData.stats.diff.casino?.ggr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
-                        trend={performanceData.stats.diff.casino?.ggr >= 0 ? 'up' : 'down'}
-                      />
-                      <StatCard
-                        title="🎰 Casino - Δ NGR"
-                        value={formatCurrency(Math.abs(performanceData.stats.diff.casino?.ngr || 0))}
-                        icon={performanceData.stats.diff.casino?.ngr >= 0 ? '📈' : '📉'}
-                        gradient={performanceData.stats.diff.casino?.ngr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
-                        trend={performanceData.stats.diff.casino?.ngr >= 0 ? 'up' : 'down'}
-                      />
-                      <StatCard
-                        title="⚽ Sportsbook - Δ GGR"
-                        value={formatCurrency(Math.abs(performanceData.stats.diff.sportsbook?.ggr || 0))}
-                        icon={performanceData.stats.diff.sportsbook?.ggr >= 0 ? '📈' : '📉'}
-                        gradient={performanceData.stats.diff.sportsbook?.ggr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
-                        trend={performanceData.stats.diff.sportsbook?.ggr >= 0 ? 'up' : 'down'}
-                      />
-                      <StatCard
-                        title="⚽ Sportsbook - Δ NGR"
-                        value={formatCurrency(Math.abs(performanceData.stats.diff.sportsbook?.ngr || 0))}
-                        icon={performanceData.stats.diff.sportsbook?.ngr >= 0 ? '📈' : '📉'}
-                        gradient={performanceData.stats.diff.sportsbook?.ngr >= 0 ? colors.gradients.lime : colors.gradients.sunset}
-                        trend={performanceData.stats.diff.sportsbook?.ngr >= 0 ? 'up' : 'down'}
-                      />
-                    </div>
-                  </>
-                )}
-              </>
-            )}
+            {/* ==== TOTAIS ACUMULADOS (COM FILTROS APLICADOS) ==== */}
+            <>
+              <h3 style={{
+                fontSize: '20px',
+                fontWeight: '800',
+                background: colors.gradients.gold,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                marginBottom: '16px',
+                textAlign: 'center'
+              }}>
+                📊 Totais Acumulados do Período Filtrado
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                <StatCard
+                  title="🎰 Casino - Total GGR"
+                  value={formatCurrency(produtosData.cassino.ggr)}
+                  icon="💰"
+                  gradient={colors.gradients.gold}
+                />
+                <StatCard
+                  title="🎰 Casino - Total NGR"
+                  value={formatCurrency(produtosData.cassino.ngr)}
+                  icon="💎"
+                  gradient={colors.gradients.lime}
+                />
+                <StatCard
+                  title="⚽ Sportsbook - Total GGR"
+                  value={formatCurrency(produtosData.sportsbook.ggr)}
+                  icon="💰"
+                  gradient={colors.gradients.purple}
+                />
+                <StatCard
+                  title="⚽ Sportsbook - Total NGR"
+                  value={formatCurrency(produtosData.sportsbook.ngr)}
+                  icon="💎"
+                  gradient={colors.gradients.blueGreen}
+                />
+              </div>
+            </>
 
             {/* ==== SEÇÃO CASSINO ==== */}
             <h3 style={{
@@ -3810,6 +3786,188 @@ const App = () => {
                 <GaugeChart value={produtosData.sportsbook.percent} max={100} title="GGR Share" color={colors.purple} />
               </GlassCard>
             </div>
+
+            {/* ==== GRÁFICOS DE TENDÊNCIA ==== */}
+            {produtosData.rawData && produtosData.rawData.length > 0 && (
+              <>
+                <h3 style={{
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  background: colors.gradients.sunset,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px',
+                  marginTop: '40px',
+                  textAlign: 'left'
+                }}>
+                  📈 Evolução Temporal
+                </h3>
+
+                {/* GGR Comparison Chart */}
+                <GlassCard style={{ marginBottom: '32px' }}>
+                  <h3 style={{
+                    color: colors.text.primary,
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    marginBottom: '20px'
+                  }}>
+                    💰 GGR: Cassino vs Sportsbook
+                  </h3>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={produtosData.rawData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} />
+                      <XAxis
+                        dataKey="data"
+                        stroke={colors.text.secondary}
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis
+                        stroke={colors.text.secondary}
+                        style={{ fontSize: '12px' }}
+                        tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: darkMode ? colors.dark : colors.light,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: '8px',
+                          color: colors.text.primary
+                        }}
+                        formatter={(value) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="cassinoGGR"
+                        name="Casino GGR"
+                        stroke={colors.gold}
+                        strokeWidth={2}
+                        dot={{ fill: colors.gold, r: 4 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="sportsbookGGR"
+                        name="Sportsbook GGR"
+                        stroke={colors.purple}
+                        strokeWidth={2}
+                        dot={{ fill: colors.purple, r: 4 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </GlassCard>
+
+                {/* NGR Comparison Chart */}
+                <GlassCard style={{ marginBottom: '32px' }}>
+                  <h3 style={{
+                    color: colors.text.primary,
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    marginBottom: '20px'
+                  }}>
+                    💎 NGR: Cassino vs Sportsbook
+                  </h3>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <AreaChart data={produtosData.rawData}>
+                      <defs>
+                        <linearGradient id="cassinoNGRGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={colors.lime} stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor={colors.lime} stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="sportsbookNGRGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={colors.blueGreen} stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor={colors.blueGreen} stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} />
+                      <XAxis
+                        dataKey="data"
+                        stroke={colors.text.secondary}
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis
+                        stroke={colors.text.secondary}
+                        style={{ fontSize: '12px' }}
+                        tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: darkMode ? colors.dark : colors.light,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: '8px',
+                          color: colors.text.primary
+                        }}
+                        formatter={(value) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                      />
+                      <Legend />
+                      <Area
+                        type="monotone"
+                        dataKey="cassinoNGR"
+                        name="Casino NGR"
+                        stroke={colors.lime}
+                        fillOpacity={1}
+                        fill="url(#cassinoNGRGradient)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="sportsbookNGR"
+                        name="Sportsbook NGR"
+                        stroke={colors.blueGreen}
+                        fillOpacity={1}
+                        fill="url(#sportsbookNGRGradient)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </GlassCard>
+
+                {/* Turnover Comparison Chart */}
+                <GlassCard>
+                  <h3 style={{
+                    color: colors.text.primary,
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    marginBottom: '20px'
+                  }}>
+                    💸 Turnover: Cassino vs Sportsbook
+                  </h3>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={produtosData.rawData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} />
+                      <XAxis
+                        dataKey="data"
+                        stroke={colors.text.secondary}
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis
+                        stroke={colors.text.secondary}
+                        style={{ fontSize: '12px' }}
+                        tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: darkMode ? colors.dark : colors.light,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: '8px',
+                          color: colors.text.primary
+                        }}
+                        formatter={(value) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                      />
+                      <Legend />
+                      <Bar
+                        dataKey="cassinoTurnover"
+                        name="Casino Turnover"
+                        fill={colors.cyan}
+                      />
+                      <Bar
+                        dataKey="sportsbookTurnover"
+                        name="Sportsbook Turnover"
+                        fill={colors.blue}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </GlassCard>
+              </>
+            )}
           </>
         )}
 
