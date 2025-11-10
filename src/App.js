@@ -876,24 +876,59 @@ const App = () => {
 
     if (perfData.length === 0) return null;
 
+    // CRÍTICO: Ordenar por timestamp ANTES de aplicar filtros
+    // Os dados podem vir desordenados do backend, e precisamos garantir ordem cronológica
+    perfData.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
+
     // Aplicar filtros de período nos dados de produtos
     if (periodFilter === 'today') {
       if (perfData.length > 0) {
+        // Pegar a data do registro MAIS RECENTE (último após ordenação)
         const lastDate = perfData[perfData.length - 1].data;
         perfData = perfData.filter(item => item.data === lastDate);
       }
     } else if (periodFilter === 'yesterday') {
       if (perfData.length > 0) {
-        const uniqueDates = [...new Set(perfData.map(item => item.data))].sort();
-        if (uniqueDates.length >= 2) {
-          const yesterdayDate = uniqueDates[uniqueDates.length - 2];
+        // Construir mapa de data -> timestamp mais recente
+        const dateTimestamps = {};
+        perfData.forEach(item => {
+          const ts = new Date(item.timestamp).getTime();
+          if (!dateTimestamps[item.data] || ts > dateTimestamps[item.data]) {
+            dateTimestamps[item.data] = ts;
+          }
+        });
+
+        // Ordenar datas por timestamp mais recente de cada dia
+        const sortedDates = Object.keys(dateTimestamps).sort((a, b) => {
+          return dateTimestamps[a] - dateTimestamps[b];
+        });
+
+        if (sortedDates.length >= 2) {
+          const yesterdayDate = sortedDates[sortedDates.length - 2];
           perfData = perfData.filter(item => item.data === yesterdayDate);
         }
       }
     } else if (periodFilter === 'last7days') {
       if (perfData.length > 0) {
-        const uniqueDates = [...new Set(perfData.map(item => item.data))].sort();
-        const last7Dates = uniqueDates.slice(-7);
+        // Construir mapa de data -> timestamp mais recente
+        const dateTimestamps = {};
+        perfData.forEach(item => {
+          const ts = new Date(item.timestamp).getTime();
+          if (!dateTimestamps[item.data] || ts > dateTimestamps[item.data]) {
+            dateTimestamps[item.data] = ts;
+          }
+        });
+
+        // Ordenar datas por timestamp e pegar últimos 7 dias
+        const sortedDates = Object.keys(dateTimestamps).sort((a, b) => {
+          return dateTimestamps[a] - dateTimestamps[b];
+        });
+
+        const last7Dates = sortedDates.slice(-7);
         perfData = perfData.filter(item => last7Dates.includes(item.data));
       }
     } else if (periodFilter === 'last20') {
@@ -926,6 +961,13 @@ const App = () => {
 
     // Converter de volta para array com apenas últimos valores de cada dia
     const perfDataLastPerDay = Object.values(perfDataByDate);
+
+    // Ordenar por timestamp para garantir ordem cronológica nos gráficos
+    perfDataLastPerDay.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
 
     // Calcular totais agregados do período filtrado
     // Para múltiplos dias, somamos os valores finais de cada dia
