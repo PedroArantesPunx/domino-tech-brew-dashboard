@@ -39,7 +39,7 @@ const App = () => {
   const [darkMode, setDarkMode] = useState(true); // Default dark
 
   const [periodFilter, setPeriodFilter] = useState('all');
-  const [tipoFilter, setTipoFilter] = useState('all');
+  // const [tipoFilter, setTipoFilter] = useState('all'); // REMOVIDO - agora cada aba filtra automaticamente
   const [activeDashboard, setActiveDashboard] = useState('performance'); // performance, risco, overview, anomalias, fingerprint
   const [anomaliesData, setAnomaliesData] = useState(null);
   const [dataQuality, setDataQuality] = useState(null);
@@ -758,9 +758,7 @@ const App = () => {
     if (!data || data.length === 0) return [];
     let filtered = [...data];
 
-    // Aplicar filtro de tipo primeiro
-    if (tipoFilter === 'performance') filtered = filtered.filter(item => item.tipoRelatorio === 'Performance de Produtos');
-    else if (tipoFilter === 'risco') filtered = filtered.filter(item => item.tipoRelatorio === 'Time de Risco');
+    // Agora cada aba filtra seus próprios dados - não aplicamos filtro global de tipo
 
     // Aplicar filtro de período
     if (periodFilter === 'today') {
@@ -794,11 +792,23 @@ const App = () => {
     }
 
     return filtered;
-  }, [data, periodFilter, tipoFilter]);
+  }, [data, periodFilter]);
+
+  // ==== DADOS FILTRADOS POR ABA ====
+  // Cada aba agora filtra automaticamente seus próprios dados
+  const performanceFilteredData = useMemo(() => {
+    return filteredData.filter(item => item.tipoRelatorio === 'Performance de Produtos');
+  }, [filteredData]);
+
+  const riscoFilteredData = useMemo(() => {
+    return filteredData.filter(item => item.tipoRelatorio === 'Time de Risco');
+  }, [filteredData]);
 
   const metrics = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return null;
-    const validData = filteredData.filter(item => item.ggr && item.ngr);
+    // Overview usa apenas dados do Time de Risco para evitar duplicação de GGR/NGR
+    const dataSource = riscoFilteredData.length > 0 ? riscoFilteredData : filteredData;
+    if (!dataSource || dataSource.length === 0) return null;
+    const validData = dataSource.filter(item => item.ggr && item.ngr);
     if (validData.length === 0) return null;
 
     const avgGGR = validData.reduce((sum, item) => sum + item.ggr, 0) / validData.length;
@@ -819,7 +829,7 @@ const App = () => {
 
     const sparklineData = validData.slice(-10).map(item => item.ggr);
     return { avgGGR, avgNGR, margin, volatility, ggrTrend, marginTrend, sparklineData };
-  }, [filteredData]);
+  }, [filteredData, riscoFilteredData]);
 
   const chartData = useMemo(() => {
     if (!filteredData || filteredData.length === 0) return [];
@@ -998,6 +1008,60 @@ const App = () => {
       count: bonusItems.length
     };
   }, [data, periodFilter]);
+
+  // ==== DADOS COMPLETOS DO TIME DE RISCO ====
+  const riscoCompleto = useMemo(() => {
+    if (!data || data.length === 0) return null;
+
+    // Filtrar dados do Time de Risco aplicando filtro de período
+    const riscoItems = riscoFilteredData.filter(item =>
+      item.tipoRelatorio === 'Time de Risco'
+    );
+
+    if (riscoItems.length === 0) return null;
+
+    // Agregar métricas de fluxo de caixa
+    const totalDepositos = riscoItems.reduce((sum, item) => sum + (item.depositos || 0), 0);
+    const totalSaques = riscoItems.reduce((sum, item) => sum + (item.saques || 0), 0);
+    const totalFluxoLiquido = riscoItems.reduce((sum, item) => sum + (item.fluxoLiquido || 0), 0);
+
+    // Agregar métricas de jogadores
+    const mediaJogadores = riscoItems.reduce((sum, item) => sum + (item.jogadoresUnicos || 0), 0) / riscoItems.length;
+    const mediaApostadores = riscoItems.reduce((sum, item) => sum + (item.apostadores || 0), 0) / riscoItems.length;
+    const mediaDepositantes = riscoItems.reduce((sum, item) => sum + (item.depositantes || 0), 0) / riscoItems.length;
+
+    // Agregar métricas de saldo
+    const saldoAtual = riscoItems.length > 0 ? (riscoItems[riscoItems.length - 1].saldoFinal || 0) : 0;
+    const saldoInicial = riscoItems.length > 0 ? (riscoItems[0].saldoInicial || 0) : 0;
+    const variacaoTotal = riscoItems.reduce((sum, item) => sum + (item.variacaoSaldo || 0), 0);
+
+    // Agregar métricas de comportamento
+    const avgDepositoMedio = riscoItems.reduce((sum, item) => sum + (item.depositoMedio || 0), 0) / riscoItems.length;
+    const avgSaqueMedio = riscoItems.reduce((sum, item) => sum + (item.saqueMedio || 0), 0) / riscoItems.length;
+    const avgTicketMedio = riscoItems.reduce((sum, item) => sum + (item.ticketMedio || 0), 0) / riscoItems.length;
+    const avgGGRMedio = riscoItems.reduce((sum, item) => sum + (item.ggrMedioJogador || 0), 0) / riscoItems.length;
+
+    return {
+      // Fluxo
+      totalDepositos,
+      totalSaques,
+      totalFluxoLiquido,
+      // Jogadores
+      mediaJogadores,
+      mediaApostadores,
+      mediaDepositantes,
+      // Saldo
+      saldoInicial,
+      saldoAtual,
+      variacaoTotal,
+      // Comportamento
+      avgDepositoMedio,
+      avgSaqueMedio,
+      avgTicketMedio,
+      avgGGRMedio,
+      count: riscoItems.length
+    };
+  }, [data, riscoFilteredData]);
 
   const exportToCSV = () => {
     if (!filteredData || filteredData.length === 0) {
@@ -2333,49 +2397,6 @@ const App = () => {
                 <option value="last100">📊 Últimos 100 Períodos</option>
               </select>
             </div>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '12px',
-                fontWeight: '700',
-                color: colors.text.secondary,
-                marginBottom: '10px',
-                textTransform: 'uppercase',
-                letterSpacing: '1.2px'
-              }}>
-                📋 Tipo de Relatório
-              </label>
-              <select
-                value={tipoFilter}
-                onChange={(e) => setTipoFilter(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '14px 18px',
-                  border: `2px solid ${darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  background: darkMode ? 'rgba(26, 29, 53, 0.6)' : 'rgba(255, 255, 255, 0.8)',
-                  color: colors.text.primary,
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  backdropFilter: 'blur(10px)',
-                  outline: 'none'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = colors.gold;
-                  e.currentTarget.style.boxShadow = `0 0 20px ${colors.gold}40`;
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <option value="all">🎯 Todos</option>
-                <option value="performance">🎰 Performance</option>
-                <option value="risco">⚠️ Risco</option>
-              </select>
-            </div>
             <div style={{
               background: darkMode
                 ? 'linear-gradient(135deg, rgba(217, 160, 13, 0.1) 0%, rgba(13, 255, 153, 0.1) 100%)'
@@ -2404,7 +2425,7 @@ const App = () => {
                 {filteredData.length}
               </div>
               <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '6px', fontWeight: '600' }}>
-                {filteredData.filter(d => d.tipoRelatorio === 'Performance de Produtos').length} Performance · {filteredData.filter(d => d.tipoRelatorio === 'Time de Risco').length} Risco
+                {performanceFilteredData.length} Performance · {riscoFilteredData.length} Risco
               </div>
             </div>
           </div>
@@ -3209,6 +3230,12 @@ const App = () => {
                 icon="💳"
                 gradient={colors.gradients.blueGreen}
               />
+              <StatCard
+                title="🎰 Apostas com Bônus"
+                value={formatCurrency(bonusData.totalApostasBonus)}
+                icon="🎲"
+                gradient={colors.gradients.cyan}
+              />
             </div>
 
             {/* Gráficos de Bônus */}
@@ -3292,6 +3319,153 @@ const App = () => {
                 </ResponsiveContainer>
               </GlassCard>
             </div>
+
+            {/* ==== SEÇÃO FLUXO DE CAIXA ==== */}
+            {riscoCompleto && (
+              <>
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  background: colors.gradients.blueGreen,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px',
+                  marginTop: '40px',
+                  textAlign: 'left'
+                }}>
+                  💰 Fluxo de Caixa
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+                  <StatCard
+                    title="💵 Total Depósitos"
+                    value={formatCurrency(riscoCompleto.totalDepositos)}
+                    icon="💰"
+                    gradient={colors.gradients.lime}
+                  />
+                  <StatCard
+                    title="💸 Total Saques"
+                    value={formatCurrency(riscoCompleto.totalSaques)}
+                    icon="💳"
+                    gradient={colors.gradients.danger}
+                  />
+                  <StatCard
+                    title="💹 Fluxo Líquido"
+                    value={formatCurrency(riscoCompleto.totalFluxoLiquido)}
+                    icon="📊"
+                    gradient={riscoCompleto.totalFluxoLiquido >= 0 ? colors.gradients.lime : colors.gradients.danger}
+                  />
+                </div>
+
+                {/* ==== SEÇÃO ANÁLISE DE JOGADORES ==== */}
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  background: colors.gradients.cyan,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px',
+                  textAlign: 'left'
+                }}>
+                  👥 Análise de Jogadores
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+                  <StatCard
+                    title="👤 Jogadores Únicos (Média)"
+                    value={Math.round(riscoCompleto.mediaJogadores)}
+                    icon="🎮"
+                    gradient={colors.gradients.cyan}
+                  />
+                  <StatCard
+                    title="🎰 Apostadores (Média)"
+                    value={Math.round(riscoCompleto.mediaApostadores)}
+                    icon="🎲"
+                    gradient={colors.gradients.purple}
+                  />
+                  <StatCard
+                    title="💰 Depositantes (Média)"
+                    value={Math.round(riscoCompleto.mediaDepositantes)}
+                    icon="💵"
+                    gradient={colors.gradients.gold}
+                  />
+                </div>
+
+                {/* ==== SEÇÃO COMPORTAMENTO FINANCEIRO ==== */}
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  background: colors.gradients.gold,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px',
+                  textAlign: 'left'
+                }}>
+                  📈 Comportamento Financeiro
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+                  <StatCard
+                    title="💵 Depósito Médio"
+                    value={formatCurrency(riscoCompleto.avgDepositoMedio)}
+                    icon="📥"
+                    gradient={colors.gradients.lime}
+                  />
+                  <StatCard
+                    title="💸 Saque Médio"
+                    value={formatCurrency(riscoCompleto.avgSaqueMedio)}
+                    icon="📤"
+                    gradient={colors.gradients.blueGreen}
+                  />
+                  <StatCard
+                    title="🎫 Ticket Médio"
+                    value={formatCurrency(riscoCompleto.avgTicketMedio)}
+                    icon="🎰"
+                    gradient={colors.gradients.purple}
+                  />
+                  <StatCard
+                    title="💰 GGR Médio/Jogador"
+                    value={formatCurrency(riscoCompleto.avgGGRMedio)}
+                    icon="👤"
+                    gradient={colors.gradients.gold}
+                  />
+                </div>
+
+                {/* ==== SEÇÃO SALDO ==== */}
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  background: colors.gradients.danger,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '24px',
+                  textAlign: 'left'
+                }}>
+                  💼 Gestão de Saldo
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
+                  <StatCard
+                    title="🏦 Saldo Inicial"
+                    value={formatCurrency(riscoCompleto.saldoInicial)}
+                    icon="📊"
+                    gradient={colors.gradients.blueGreen}
+                  />
+                  <StatCard
+                    title="💰 Saldo Atual"
+                    value={formatCurrency(riscoCompleto.saldoAtual)}
+                    icon="💼"
+                    gradient={colors.gradients.gold}
+                  />
+                  <StatCard
+                    title="📊 Variação Total"
+                    value={formatCurrency(riscoCompleto.variacaoTotal)}
+                    icon="📈"
+                    gradient={riscoCompleto.variacaoTotal >= 0 ? colors.gradients.lime : colors.gradients.danger}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
 
